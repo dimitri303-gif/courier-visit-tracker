@@ -25,3 +25,8 @@ build/
 # Local env files
 .env*.local
 .env
+
+# Native folders
+/android/
+/ios/
+.expo/
