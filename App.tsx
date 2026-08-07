@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { StorageService } from './src/services/storage';
 import { VisitDetector } from './src/services/detector';
 import { SyncService } from './src/services/sync';
+
+// Ігноруємо специфічні попередження Expo Go для фонових служб геолокації
+LogBox.ignoreLogs([
+  "Couldn't start the foreground service",
+  "Foreground service permissions were not found in the manifest"
+]);
 
 // Імпорт екранів
 import { LoginScreen } from './src/screens/LoginScreen';

@@ -101,6 +101,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const startTime = new Date().toISOString();
     
     try {
+      // Отримуємо поточні координати для старту зміни
+      const coords = await LocationService.getCurrentLocation();
+
       // Створюємо лог
       await SyncService.queueLog('shift_start_request', `Courier requested shift start: ${shiftId}`);
       
@@ -119,7 +122,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       await LocationService.startBackgroundTracking();
 
       // Відправляємо подію на сервер
-      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', '1.0.0', startTime, null)
+      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', '1.0.0', startTime, coords)
         .catch(async (e) => {
           // Якщо немає інтернету, записуємо збій у логи (подія відправиться пізніше)
           await SyncService.queueLog('shift_start_offline', `Start shift offline saved: ${shiftId}`, e.toString());
@@ -148,6 +151,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             const shiftId = activeShift.shift_id;
 
             try {
+              // Отримуємо поточні координати для завершення зміни
+              const coords = await LocationService.getCurrentLocation();
+
               // 1. Зупиняємо відстеження
               await LocationService.stopBackgroundTracking();
 
@@ -162,7 +168,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               setActiveShift(null);
 
               // 5. Відправляємо на сервер
-              ApiService.endShift(token, shiftId, courierId, endTime, null)
+              ApiService.endShift(token, shiftId, courierId, endTime, coords)
                 .catch(async (e) => {
                   await SyncService.queueLog('shift_end_offline', `End shift offline saved: ${shiftId}`, e.toString());
                 });

@@ -16,11 +16,11 @@ function setupDatabase() {
   
   // 1. Створення аркушів та заголовків
   setupSheet(ss, "Couriers", [
-    "courier_id", "name", "phone", "pin_hash", "token", "active", "platform", "notes"
+    "courier_id", "name", "phone", "pin_hash", "token", "active", "platform", "notes", "region"
   ]);
   
   setupSheet(ss, "Locations", [
-    "location_id", "name", "address", "latitude", "longitude", "radius_m", "indoor", "active", "updated_at", "notes"
+    "location_id", "name", "address", "latitude", "longitude", "radius_m", "indoor", "active", "updated_at", "notes", "region"
   ]);
   
   setupSheet(ss, "Shifts", [
@@ -38,6 +38,10 @@ function setupDatabase() {
   
   setupSheet(ss, "Settings", [
     "key", "value"
+  ]);
+  
+  setupSheet(ss, "CourierStatus", [
+    "courier_id", "name", "last_seen", "latitude", "longitude", "accuracy_m", "battery_percent", "status", "map_link"
   ]);
   
   // 2. Заповнення налаштувань за замовчуванням (якщо порожньо)
@@ -110,11 +114,11 @@ function setupSampleCouriers(ss) {
     // PIN "1234" -> SHA-256: 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
     // PIN "5678" -> SHA-256: 3fdba35f04df8c45698a5e577d343c68370b93ca445aba39775ede22cf05d5e2
     var couriers = [
-      ["C001", "Іван Коваленко", "+380501112233", "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", "token-ivan-123", "true", "android", "Тестовий кур'єр (Android)"],
-      ["C002", "Марія Петренко", "+380674445566", "3fdba35f04df8c45698a5e577d343c68370b93ca445aba39775ede22cf05d5e2", "token-maria-456", "true", "ios", "Тестовий кур'єр (iOS)"]
+      ["C001", "Іван Коваленко", "+380501112233", "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", "token-ivan-123", "true", "android", "Тестовий кур'єр (Android)", "Івано-Франківськ"],
+      ["C002", "Марія Петренко", "+380674445566", "3fdba35f04df8c45698a5e577d343c68370b93ca445aba39775ede22cf05d5e2", "token-maria-456", "true", "ios", "Тестовий кур'єр (iOS)", "Київ"]
     ];
     
-    sheet.getRange(2, 1, couriers.length, 8).setValues(couriers);
+    sheet.getRange(2, 1, couriers.length, 9).setValues(couriers);
     Logger.log("Додано тестових кур'єрів (Іван: C001/1234, Марія: C002/5678).");
   }
 }
@@ -129,14 +133,16 @@ function setupSampleLocations(ss) {
   if (sheet.getLastRow() <= 1) {
     var nowStr = new Date().toISOString();
     var locations = [
-      ["L001", "Київський ЦУМ", "вул. Хрещатик, 38", 50.4468, 30.5218, 30, "true", "true", nowStr, "ЦУМ (Торговий центр)"],
-      ["L002", "ТЦ Глобус", "Майдан Незалежності, 1", 50.4508, 30.5256, 30, "true", "true", nowStr, "Глобус (ТЦ, підземні зони)"],
-      ["L003", "Золоті Ворота", "вул. Володимирська, 40А", 50.4488, 30.5133, 30, "false", "true", nowStr, "Історична пам'ятка, відкритий простір"],
-      ["L004", "Бессарабська площа", "Бессарабська площа, 2", 50.4428, 30.5210, 35, "false", "true", nowStr, "Бессарабський ринок"],
-      ["L005", "Контрактова площа (Поділ)", "Контрактова площа, 4", 50.4632, 30.5186, 40, "false", "true", nowStr, "Подільський район, відкрита площа"]
+      ["L001", "Київський ЦУМ", "вул. Хрещатик, 38", 50.4468, 30.5218, 30, "true", "true", nowStr, "ЦУМ (Торговий центр)", "Київ"],
+      ["L002", "ТЦ Глобус", "Майдан Незалежності, 1", 50.4508, 30.5256, 30, "true", "true", nowStr, "Глобус (ТЦ, підземні зони)", "Київ"],
+      ["L003", "Золоті Ворота", "вул. Володимирська, 40А", 50.4488, 30.5133, 30, "false", "true", nowStr, "Історична пам'ятка, відкритий простір", "Київ"],
+      ["L004", "Бессарабська площа", "Бессарабська площа, 2", 50.4428, 30.5210, 35, "false", "true", nowStr, "Бессарабський ринок", "Київ"],
+      ["L005", "Контрактова площа (Поділ)", "Контрактова площа, 4", 50.4632, 30.5186, 40, "false", "true", nowStr, "Подільський район, відкрита площа", "Київ"],
+      ["L006", "Ратуша (Івано-Франківськ)", "площа Ринок, 1", 48.9229, 24.7101, 30, "false", "true", nowStr, "Центральна площа міста", "Івано-Франківськ"],
+      ["L007", "ТЦ Велес (Івано-Франківськ)", "вул. Вовчинецька, 225А", 48.9392, 24.7397, 40, "true", "true", nowStr, "Великий ТЦ", "Івано-Франківськ"]
     ];
     
-    sheet.getRange(2, 1, locations.length, 10).setValues(locations);
-    Logger.log("Додано 5 тестових локацій у місті Київ.");
+    sheet.getRange(2, 1, locations.length, 11).setValues(locations);
+    Logger.log("Додано 7 тестових локацій (Київ та Івано-Франківськ).");
   }
 }

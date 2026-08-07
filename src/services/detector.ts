@@ -66,6 +66,29 @@ export const VisitDetector = {
     const activeShift = await StorageService.getActiveShift();
     if (!activeShift) return; // Відстеження тільки під час зміни
 
+    // Логіка періодичного фонового сигналу розташування (heartbeat)
+    try {
+      const lastHeartbeatStr = await StorageService.getLastHeartbeatTime();
+      const lastHeartbeat = lastHeartbeatStr ? parseInt(lastHeartbeatStr, 10) : 0;
+      const nowMs = Date.now();
+      
+      // Раз на 10 хвилин (600,000 мілісекунд)
+      if (nowMs - lastHeartbeat >= 10 * 60 * 1000) {
+        await StorageService.setLastHeartbeatTime(String(nowMs));
+        
+        await SyncService.queueLog('heartbeat', 'Periodic location heartbeat', JSON.stringify({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy_m: Math.round(coords.accuracy || 10)
+        }));
+        
+        // Запускаємо фонову синхронізацію
+        SyncService.triggerSync().catch(err => console.warn('Heartbeat sync warning:', err));
+      }
+    } catch (e) {
+      console.error('Помилка логування heartbeat:', e);
+    }
+
     const now = new Date();
     const nowStr = now.toISOString();
 

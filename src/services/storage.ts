@@ -34,6 +34,7 @@ const KEYS = {
   POINTS_VERSION: '@points_version',
   CONFIG: '@config',
   OFFLINE_QUEUE: '@offline_queue',
+  LAST_HEARTBEAT: '@last_heartbeat',
 };
 
 // Дефолтна адреса бекенду (може бути змінена в екрані Debug)
@@ -132,6 +133,14 @@ export const StorageService = {
 
   async setOfflineQueue(queue: SyncEvent[]): Promise<void> {
     await AsyncStorage.setItem(KEYS.OFFLINE_QUEUE, JSON.stringify(queue));
+  },
+
+  async getLastHeartbeatTime(): Promise<string | null> {
+    return AsyncStorage.getItem(KEYS.LAST_HEARTBEAT);
+  },
+
+  async setLastHeartbeatTime(time: string): Promise<void> {
+    await AsyncStorage.setItem(KEYS.LAST_HEARTBEAT, time);
   },
 
   async clearSession(): Promise<void> {

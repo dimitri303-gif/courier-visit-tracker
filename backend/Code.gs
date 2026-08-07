@@ -91,7 +91,7 @@ function doGet(e) {
       });
     }
     
-    var points = getActiveLocations();
+    var points = getActiveLocations(courier.region);
     return jsonResponse({
       ok: true,
       points_version: serverVersion,
@@ -143,15 +143,15 @@ function doPost(e) {
     lock.waitLock(10000);
     
     if (action === "shift/start") {
-      return handleShiftStart(payload, courier.courier_id);
+      return handleShiftStart(payload, courier);
     }
     
     if (action === "shift/end") {
-      return handleShiftEnd(payload, courier.courier_id);
+      return handleShiftEnd(payload, courier);
     }
     
     if (action === "events/batch") {
-      return handleEventsBatch(payload, courier.courier_id);
+      return handleEventsBatch(payload, courier);
     }
     
   } catch (err) {
@@ -224,12 +224,21 @@ function handleLogin(data) {
 /**
  * Початок зміни кур'єра
  */
-function handleShiftStart(data, courierId) {
+function handleShiftStart(data, courier) {
+  var courierId = courier.courier_id;
   var shiftId = data.shift_id;
   var startTime = data.start_time || new Date().toISOString();
   var platform = data.platform || "unknown";
   var appVersion = data.app_version || "1.0.0";
   var deviceId = data.device_id || "unknown";
+  
+  // Оновлюємо статус розташування кур'єра
+  try {
+    var loc = data.location || {};
+    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, null, "active");
+  } catch(e) {
+    Logger.log("Error updating location status: " + e.toString());
+  }
   
   if (!shiftId) {
     return jsonResponse({ ok: false, error: "shift_id is required" });
@@ -279,9 +288,18 @@ function handleShiftStart(data, courierId) {
 /**
  * Завершення зміни
  */
-function handleShiftEnd(data, courierId) {
+function handleShiftEnd(data, courier) {
+  var courierId = courier.courier_id;
   var shiftId = data.shift_id;
   var endTime = data.end_time || new Date().toISOString();
+  
+  // Оновлюємо статус розташування кур'єра
+  try {
+    var loc = data.location || {};
+    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, null, "ended");
+  } catch(e) {
+    Logger.log("Error updating location status: " + e.toString());
+  }
   
   if (!shiftId) {
     return jsonResponse({ ok: false, error: "shift_id is required" });
@@ -316,7 +334,9 @@ function handleShiftEnd(data, courierId) {
 /**
  * Обробка черги подій пакетом (візити, ручні чекіни, логи)
  */
-function handleEventsBatch(data, courierId) {
+function handleEventsBatch(data, courier) {
+  var courierId = courier.courier_id;
+  var name = courier.name;
   var batch = data.batch;
   var shiftId = data.shift_id;
   
@@ -397,6 +417,13 @@ function handleEventsBatch(data, courierId) {
       existingVisitUuids[uuid] = true;
       accepted++;
       
+      // Оновлюємо розташування кур'єра за візитом
+      try {
+        if (payload.enter_lat && payload.enter_lng) {
+          updateCourierStatus(courierId, name, payload.enter_lat, payload.enter_lng, payload.accuracy_m, null, "active");
+        }
+      } catch(e) {}
+      
     } else if (type === "log") {
       if (existingLogUuids[uuid]) {
         duplicates++;
@@ -423,6 +450,16 @@ function handleEventsBatch(data, courierId) {
       
       existingLogUuids[uuid] = true;
       accepted++;
+
+      // Оновлюємо розташування кур'єра, якщо це heartbeat-сигнал
+      try {
+        if (payload.event_type === "heartbeat" && payload.details) {
+          var detailsObj = JSON.parse(payload.details);
+          if (detailsObj && detailsObj.latitude && detailsObj.longitude) {
+            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, null, "active");
+          }
+        }
+      } catch(e) {}
     } else {
       failed.push({ index: k, error: "Unsupported event_type: " + type });
     }
@@ -472,7 +509,8 @@ function getCourierByToken(token) {
       return {
         courier_id: String(rows[i][0]),
         name: String(rows[i][1]),
-        active: String(rows[i][5]) === "true"
+        active: String(rows[i][5]) === "true",
+        region: String(rows[i][8] || "").trim() // 9th column (index 8)
       };
     }
   }
@@ -482,7 +520,7 @@ function getCourierByToken(token) {
 /**
  * Отримання списку активних локацій для завантаження на пристрій
  */
-function getActiveLocations() {
+function getActiveLocations(courierRegion) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Locations");
   var rows = sheet.getDataRange().getValues();
@@ -491,8 +529,13 @@ function getActiveLocations() {
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
     var active = String(row[7]);
+    var locRegion = String(row[10] || "").trim(); // 11th column (index 10)
     
     if (active === "true") {
+      // Якщо в точці та в профілі кур'єра вказані регіони, і вони не збігаються — ігноруємо
+      if (courierRegion && locRegion && locRegion.toLowerCase() !== courierRegion.toLowerCase()) {
+        continue;
+      }
       locations.push({
         location_id: String(row[0]),
         name: String(row[1]),
@@ -518,4 +561,71 @@ function parseDate(isoString) {
     return isoString;
   }
   return date;
+}
+
+/**
+ * Обчислює SHA-256 хеш для PIN-коду. Використовуйте як формулу в Google Sheets для створення паролів.
+ * Наприклад: =HASH_PIN(1234)
+ * @param {string} pin PIN-код кур'єра.
+ * @return {string} SHA-256 хеш.
+ * @customfunction
+ */
+function HASH_PIN(pin) {
+  if (pin === undefined || pin === null || pin === "") return "";
+  return hashPin(String(pin));
+}
+
+/**
+ * Оновлює або додає статус кур'єра (останнє місце знаходження, статус зміни, заряд батареї)
+ */
+function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, status) {
+  if (!courierId) return;
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("CourierStatus");
+  if (!sheet) return;
+  
+  var rows = sheet.getDataRange().getValues();
+  var now = new Date();
+  
+  // Шукаємо існуючий рядок кур'єра
+  var courierRowIndex = -1;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === courierId) {
+      courierRowIndex = i + 1;
+      break;
+    }
+  }
+  
+  // Дані для запису:
+  // 1: courier_id, 2: name, 3: last_seen, 4: latitude, 5: longitude, 6: accuracy_m, 7: battery_percent, 8: status, 9: map_link
+  var lastSeen = now;
+  
+  if (courierRowIndex !== -1) {
+    // Оновлюємо існуючий рядок
+    if (lat) sheet.getRange(courierRowIndex, 4).setValue(lat);
+    if (lng) sheet.getRange(courierRowIndex, 5).setValue(lng);
+    if (accuracy) sheet.getRange(courierRowIndex, 6).setValue(accuracy);
+    if (battery !== undefined && battery !== null) sheet.getRange(courierRowIndex, 7).setValue(battery);
+    if (status) sheet.getRange(courierRowIndex, 8).setValue(status);
+    
+    sheet.getRange(courierRowIndex, 3).setValue(lastSeen).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+  } else {
+    // Додаємо новий рядок
+    var rowNum = sheet.getLastRow() + 1;
+    var mapLinkFormula = '=HYPERLINK("https://www.google.com/maps/search/?api=1&query=" & D' + rowNum + ' & "," & E' + rowNum + '; "Показати на карті")';
+    
+    sheet.appendRow([
+      courierId,
+      name || "",
+      lastSeen,
+      lat || "",
+      lng || "",
+      accuracy || "",
+      battery !== undefined && battery !== null ? battery : "",
+      status || "",
+      mapLinkFormula
+    ]);
+    sheet.getRange(rowNum, 3).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+  }
 }

@@ -97,6 +97,41 @@ export const LocationService = {
   },
 
   /**
+   * Отримує поточні координати пристрою (для старт/енд зміни або ручного чекіну)
+   */
+  async getCurrentLocation(): Promise<{ latitude: number; longitude: number; accuracy_m: number } | null> {
+    try {
+      const isEnabled = await this.isLocationEnabled();
+      if (!isEnabled) return null;
+      
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      return {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        accuracy_m: Math.round(loc.coords.accuracy || 10)
+      };
+    } catch (e) {
+      console.warn('Cannot get current position, trying last known position:', e);
+      try {
+        const lastLoc = await Location.getLastKnownPositionAsync({});
+        if (lastLoc) {
+          return {
+            latitude: lastLoc.coords.latitude,
+            longitude: lastLoc.coords.longitude,
+            accuracy_m: Math.round(lastLoc.coords.accuracy || 50)
+          };
+        }
+      } catch (e2) {
+        // ignore
+      }
+      return null;
+    }
+  },
+
+  /**
    * Зупинка фонового відстеження
    */
   async stopBackgroundTracking(): Promise<void> {
