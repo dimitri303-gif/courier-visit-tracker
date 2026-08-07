@@ -4,10 +4,10 @@
     "slug": "courier-visit-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon.jpg",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon.jpg",
         "backgroundColor": "#0f172a"
       },
       "package": "com.couriermvp.tracker",
@@ -31,6 +31,11 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION"
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e244d165-30f6-4f18-9989-d7b5551706f5"
+      }
     }
   }
 }
