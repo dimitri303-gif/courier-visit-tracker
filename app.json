@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Courier Tracker",
+    "slug": "courier-visit-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Додаток використовує геолокацію для відстеження прибуття кур'єра на торгові точки під час активної зміни.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Додатку потрібен постійний доступ до геолокації для фонового відстеження візитів під час робочої зміни."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.couriermvp.tracker",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    }
+  }
+}

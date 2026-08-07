@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Courier Visit Tracker MVP</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --bg-input: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+      --accent-hover: #4f46e5;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --border-radius: 16px;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-bottom: 30px;
+    }
+
+    header {
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      background: var(--accent-gradient);
+      margin-bottom: 8px;
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .logo-container svg {
+      width: 28px;
+      height: 28px;
+      fill: #fff;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* CARD SYSTEM */
+    .card {
+      background-color: var(--bg-card);
+      border-radius: var(--border-radius);
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      transition: var(--transition);
+    }
+
+    /* WARNING BADGE */
+    .ios-warning {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12px;
+      color: #fbd38d;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .ios-warning svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      fill: #fbd38d;
+    }
+
+    /* LOGIN SCREEN */
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .input-group input {
+      background-color: var(--bg-input);
+      border: 1.5px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      color: #fff;
+      font-family: inherit;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .input-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+    }
+
+    .btn {
+      background: var(--accent-gradient);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--transition);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-secondary {
+      background: var(--bg-input);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: none;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* HOME SCREEN & DASHBOARD */
+    .dashboard {
+      display: none; /* Показано після авторизації */
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .profile-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .user-info h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .user-info p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .badge-off {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+
+    .badge-on {
+      background: rgba(16, 185, 129, 0.15);
+      color: #6ee7b7;
+    }
+
+    /* SHIFT CONTROL CARD */
+    .shift-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .status-text {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .status-time {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 4px 0;
+    }
+
+    /* MANUAL CHECK-IN CARD */
+    .checkin-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .search-box {
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px 12px 12px 40px;
+      font-size: 14px;
+      color: #fff;
+      outline: none;
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      fill: var(--text-muted);
+    }
+
+    .locations-list {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+      padding-right: 4px;
+    }
+
+    .location-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .location-item:hover, .location-item.selected {
+      background: rgba(99, 102, 241, 0.08);
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .location-item.selected {
+      box-shadow: 0 0 0 1.5px var(--accent);
+    }
+
+    .loc-details h4 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .loc-details p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .loc-distance {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent);
+      background: rgba(99, 102, 241, 0.1);
+      padding: 2px 8px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    /* SYSTEM STATUS FOOTER */
+    .status-footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 0 6px;
+    }
+
+    .footer-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--text-muted);
+      display: inline-block;
+    }
+
+    .dot-active {
+      background-color: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .loading-spinner {
+      border: 3px solid rgba(255,255,255,0.1);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border-left-color: #fff;
+      animation: spin 1s linear infinite;
+      display: none;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* CUSTOM SCROLLBAR FOR LOCATIONS */
+    .locations-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .locations-list::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.1);
+      border-radius: 10px;
+    }
+    .locations-list::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+    }
+    .locations-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <header>
+      <div class="logo-container">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>
+      <h1>Visit Tracker</h1>
+      <div class="subtitle">Система відміток кур'єрів (iOS Fallback)</div>
+    </header>
+
+    <!-- ПОПЕРЕДЖЕННЯ ДЛЯ IOS -->
+    <div class="ios-warning">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+      </svg>
+      <div>
+        <strong>Увага для iOS:</strong> Браузер не підтримує надійне відстеження у фоновому режимі. Залишайте сторінку відкритою під час руху або використовуйте <strong>ручне відмічення</strong> на точці.
+      </div>
+    </div>
+
+    <!-- ЕКРАН АВТОРИЗАЦІЇ -->
+    <div id="loginScreen" class="card">
+      <form class="login-form" id="loginForm" onsubmit="handleLoginSubmit(event)">
+        <div class="input-group">
+          <label for="courierId">ID Кур'єра</label>
+          <input type="text" id="courierId" placeholder="Наприклад, C001" required autocomplete="username">
+        </div>
+        <div class="input-group">
+          <label for="pinCode">PIN-код</label>
+          <input type="password" id="pinCode" inputmode="numeric" pattern="[0-9]*" placeholder="••••" required autocomplete="current-password">
+        </div>
+        <div class="loading-spinner" id="loginSpinner"></div>
+        <button type="submit" class="btn" id="loginBtn">Увійти</button>
+      </form>
+    </div>
+
+    <!-- ГОЛОВНИЙ ЕКРАН (DASHBOARD) -->
+    <div id="dashboardScreen" class="dashboard">
+      
+      <!-- Профіль -->
+      <div class="card profile-card">
+        <div class="user-info">
+          <h2 id="courierName">Завантаження...</h2>
+          <p id="courierIdBadge">ID: C000</p>
+        </div>
+        <div id="shiftBadge" class="badge badge-off">Зміна закрита</div>
+      </div>
+
+      <!-- Зміна -->
+      <div class="card shift-card">
+        <div class="status-text" id="shiftStatusText">Тривалість поточної зміни</div>
+        <div class="status-time" id="shiftDuration">00:00:00</div>
+        
+        <button id="shiftBtn" class="btn" onclick="toggleShift()">Почати зміну</button>
+      </div>
+
+      <!-- Ручний Чекін -->
+      <div class="card checkin-card" id="manualCheckinContainer" style="opacity: 0.5; pointer-events: none;">
+        <h3>Ручний Чек-ін</h3>
+        <p class="status-text">Виберіть локацію для відмітки прибуття:</p>
+        
+        <div class="search-box">
+          <svg viewBox="0 0 24 24">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <input type="text" id="searchBar" oninput="filterLocations()" placeholder="Пошук за назвою або ID...">
+        </div>
+
+        <div class="locations-list" id="locationsList">
+          <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px;">
+            Геолокація визначається...
+          </div>
+        </div>
+
+        <div class="loading-spinner" id="checkinSpinner"></div>
+        <button id="checkinBtn" class="btn" onclick="submitManualCheckin()" disabled>Підтвердити прибуття</button>
+      </div>
+
+      <button onclick="logout()" class="btn btn-secondary">Вийти з акаунту</button>
+      
+    </div>
+
+    <!-- СИСТЕМНИЙ СТАТУС -->
+    <div class="status-footer">
+      <div class="footer-item">
+        <span class="dot" id="networkDot"></span>
+        <span id="networkText">Перевірка мережі...</span>
+      </div>
+      <div class="footer-item" id="gpsStatusContainer">
+        <span class="dot" id="gpsDot"></span>
+        <span id="gpsText">GPS: Неактивний</span>
+      </div>
+      <div class="footer-item">
+        <span id="queueText">Черга: 0</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Інжектована адреса веб-додатку
+    const WEB_APP_URL = "<?= webAppUrl ?>";
+    
+    // Стан додатку
+    let state = {
+      courierId: null,
+      courierName: "",
+      token: null,
+      shiftActive: false,
+      shiftId: null,
+      shiftStartTime: null,
+      locations: [],
+      selectedLocationId: null,
+      currentCoords: null,
+      gpsAccuracy: null,
+      shiftTimer: null,
+      offlineQueue: [],
+      syncing: false
+    };
+
+    // Ініціалізація сторінки
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStateFromStorage();
+      checkNetworkStatus();
+      setInterval(checkNetworkStatus, 10000);
+      
+      if (state.token) {
+        showDashboard();
+      } else {
+        showLogin();
+      }
+      
+      // Запит геолокації для оновлення списку
+      initGeolocationWatch();
+      loadOfflineQueue();
+      processQueue();
+    });
+
+    // МЕРЕЖА
+    function checkNetworkStatus() {
+      const isOnline = navigator.onLine;
+      const dot = document.getElementById('networkDot');
+      const text = document.getElementById('networkText');
+      
+      if (isOnline) {
+        dot.className = "dot dot-active";
+        text.innerText = "В мережі";
+        processQueue();
+      } else {
+        dot.className = "dot";
+        text.innerText = "Офлайн";
+      }
+    }
+
+    // ЗБЕРЕЖЕННЯ СТАНУ
+    function saveStateToStorage() {
+      localStorage.setItem('tracker_state', JSON.stringify({
+        courierId: state.courierId,
+        courierName: state.courierName,
+        token: state.token,
+        shiftActive: state.shiftActive,
+        shiftId: state.shiftId,
+        shiftStartTime: state.shiftStartTime,
+        locations: state.locations
+      }));
+    }
+
+    function loadStateFromStorage() {
+      const saved = localStorage.getItem('tracker_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        state.courierId = parsed.courierId;
+        state.courierName = parsed.courierName;
+        state.token = parsed.token;
+        state.shiftActive = parsed.shiftActive || false;
+        state.shiftId = parsed.shiftId;
+        state.shiftStartTime = parsed.shiftStartTime;
+        state.locations = parsed.locations || [];
+      }
+    }
+
+    // НАВІГАЦІЯ ЕКРАНІВ
+    function showLogin() {
+      document.getElementById('loginScreen').style.display = 'block';
+      document.getElementById('dashboardScreen').style.display = 'none';
+    }
+
+    function showDashboard() {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('dashboardScreen').style.display = 'flex';
+      
+      document.getElementById('courierName').innerText = state.courierName;
+      document.getElementById('courierIdBadge').innerText = `ID: ${state.courierId}`;
+      
+      updateShiftUI();
+      
+      if (state.locations.length === 0) {
+        downloadPoints();
+      } else {
+        renderLocations();
+      }
+    }
+
+    // ЛОГІН
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      
+      const courierId = document.getElementById('courierId').value.trim();
+      const pin = document.getElementById('pinCode').value.trim();
+      
+      const btn = document.getElementById('loginBtn');
+      const spinner = document.getElementById('loginSpinner');
+      
+      btn.style.display = 'none';
+      spinner.style.display = 'block';
+      
+      try {
+        const response = await apiCall("login", {
+          courier_id: courierId,
+          pin: pin
+        });
+        
+        if (response.ok) {
+          state.courierId = response.courier_id;
+          state.courierName = response.name;
+          state.token = response.token;
+          state.locations = []; // Завантажимо після переходу
+          saveStateToStorage();
+          showDashboard();
+          downloadPoints();
+        } else {
+          alert("Помилка авторизації: " + (response.error || "Невірна інформація"));
+        }
+      } catch (err) {
+        alert("Помилка зв'язку: " + err.toString());
+      } finally {
+        btn.style.display = 'block';
+        spinner.style.display = 'none';
+      }
+    }
+
+    function logout() {
+      if (state.shiftActive) {
+        if (!confirm("Ви маєте активну зміну. Завершити зміну перед виходом?")) {
+          return;
+        }
+        toggleShift(); // Закриваємо зміну
+      }
+      
+      state.courierId = null;
+      state.courierName = "";
+      state.token = null;
+      state.shiftActive = false;
+      state.shiftId = null;
+      state.shiftStartTime = null;
+      state.locations = [];
+      state.selectedLocationId = null;
+      saveStateToStorage();
+      showLogin();
+    }
+
+    // ОТРИМАННЯ ТОЧОК
+    async function downloadPoints() {
+      if (!state.token) return;
+      
+      try {
+        const response = await fetch(`${WEB_APP_URL}?action=points&token=${state.token}`);
+        const data = await response.json();
+        
+        if (data.ok && data.points) {
+          state.locations = data.points;
+          saveStateToStorage();
+          renderLocations();
+        }
+      } catch (err) {
+        console.error("Помилка завантаження точок: ", err);
+      }
+    }
+
+    // ЗМІНА (SHIFT)
+    async function toggleShift() {
+      const btn = document.getElementById('shiftBtn');
+      btn.disabled = true;
+      
+      if (!state.shiftActive) {
+        // Початок зміни
+        const shiftId = generateUUID();
+        const startTime = new Date().toISOString();
+        
+        const event = {
+          action: "shift/start",
+          token: state.token,
+          shift_id: shiftId,
+          courier_id: state.courierId,
+          platform: "ios_web",
+          app_version: "1.0.0_web",
+          device_id: "safari_web",
+          start_time: startTime,
+          location: state.currentCoords ? {
+            latitude: state.currentCoords.latitude,
+            longitude: state.currentCoords.longitude,
+            accuracy_m: state.gpsAccuracy
+          } : null
+        };
+        
+        state.shiftId = shiftId;
+        state.shiftStartTime = startTime;
+        state.shiftActive = true;
+        saveStateToStorage();
+        updateShiftUI();
+        
+        // Відправляємо або додаємо в офлайн-чергу
+        queueOrSend(event);
+        btn.disabled = false;
+      } else {
+        // Завершення зміни
+        if (!confirm("Завершити поточну зміну?")) {
+          btn.disabled = false;
+          return;
+        }
+        
+        const endTime = new Date().toISOString();
+        const event = {
+          action: "shift/end",
+          token: state.token,
+          shift_id: state.shiftId,
+          courier_id: state.courierId,
+          end_time: endTime,
+          location: state.currentCoords ? {
+            latitude: state.currentCoords.latitude,
+            longitude: state.currentCoords.longitude,
+            accuracy_m: state.gpsAccuracy
+          } : null
+        };
+        
+        state.shiftActive = false;
+        state.shiftId = null;
+        state.shiftStartTime = null;
+        saveStateToStorage();
+        updateShiftUI();
+        
+        queueOrSend(event);
+        btn.disabled = false;
+      }
+    }
+
+    function updateShiftUI() {
+      const badge = document.getElementById('shiftBadge');
+      const btn = document.getElementById('shiftBtn');
+      const durationText = document.getElementById('shiftDuration');
+      const container = document.getElementById('manualCheckinContainer');
+      
+      if (state.shiftActive) {
+        badge.className = "badge badge-on";
+        badge.innerText = "На зміні";
+        btn.innerText = "Завершити зміну";
+        btn.className = "btn btn-danger";
+        
+        container.style.opacity = "1";
+        container.style.pointerEvents = "auto";
+        
+        startTimer();
+      } else {
+        badge.className = "badge badge-off";
+        badge.innerText = "Зміна закрита";
+        btn.innerText = "Почати зміну";
+        btn.className = "btn";
+        
+        container.style.opacity = "0.5";
+        container.style.pointerEvents = "none";
+        
+        stopTimer();
+        durationText.innerText = "00:00:00";
+      }
+    }
+
+    // ТАЙМЕР ЗМІНИ
+    function startTimer() {
+      if (state.shiftTimer) clearInterval(state.shiftTimer);
+      
+      const updateTimer = () => {
+        if (!state.shiftStartTime) return;
+        const diffMs = new Date() - new Date(state.shiftStartTime);
+        const hours = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
+        const minutes = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
+        const seconds = Math.floor((diffMs % 60000) / 1000).toString().padStart(2, '0');
+        document.getElementById('shiftDuration').innerText = `${hours}:${minutes}:${seconds}`;
+      };
+      
+      updateTimer();
+      state.shiftTimer = setInterval(updateTimer, 1000);
+    }
+
+    function stopTimer() {
+      if (state.shiftTimer) {
+        clearInterval(state.shiftTimer);
+        state.shiftTimer = null;
+      }
+    }
+
+    // ГЕОЛОКАЦІЯ
+    function initGeolocationWatch() {
+      const gpsDot = document.getElementById('gpsDot');
+      const gpsText = document.getElementById('gpsText');
+      
+      if (!navigator.geolocation) {
+        gpsText.innerText = "GPS не підтримується";
+        return;
+      }
+      
+      navigator.geolocation.watchPosition(
+        (position) => {
+          state.currentCoords = position.coords;
+          state.gpsAccuracy = Math.round(position.coords.accuracy);
+          
+          gpsDot.className = "dot dot-active";
+          gpsText.innerText = `GPS: Точність ±${state.gpsAccuracy}м`;
+          
+          renderLocations();
+        },
+        (error) => {
+          console.error("GPS Error: ", error);
+          gpsDot.className = "dot";
+          gpsText.innerText = "GPS: Помилка геолокації";
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+    }
+
+    // РОЗРАХУНОК ВІДСТАНІ (HAVERSINE)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // метри
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2-lat1) * Math.PI/180;
+      const Δλ = (lon2-lon1) * Math.PI/180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c; // в метрах
+    }
+
+    // РЕНДЕР СПИСКУ ЛОКАЦІЙ
+    function renderLocations() {
+      const list = document.getElementById('locationsList');
+      const query = document.getElementById('searchBar').value.toLowerCase();
+      
+      let items = [...state.locations];
+      
+      // Обчислюємо відстань, якщо є GPS
+      if (state.currentCoords) {
+        items.forEach(loc => {
+          loc.distance = calculateDistance(
+            state.currentCoords.latitude,
+            state.currentCoords.longitude,
+            loc.latitude,
+            loc.longitude
+          );
+        });
+        // Сортуємо: спочатку найближчі
+        items.sort((a, b) => a.distance - b.distance);
+      }
+      
+      // Фільтруємо
+      if (query) {
+        items = items.filter(loc => 
+          loc.name.toLowerCase().includes(query) || 
+          loc.location_id.toLowerCase().includes(query) ||
+          loc.address.toLowerCase().includes(query)
+        );
+      }
+      
+      if (items.length === 0) {
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px;">Нічого не знайдено</div>`;
+        return;
+      }
+      
+      list.innerHTML = "";
+      items.forEach(loc => {
+        const item = document.createElement('div');
+        item.className = `location-item ${state.selectedLocationId === loc.location_id ? 'selected' : ''}`;
+        item.onclick = () => selectLocation(loc.location_id);
+        
+        const distText = loc.distance !== undefined ? 
+          (loc.distance > 1000 ? `${(loc.distance/1000).toFixed(1)} км` : `${Math.round(loc.distance)} м`) : 
+          "Невідомо";
+          
+        item.innerHTML = `
+          <div class="loc-details">
+            <h4>${loc.name}</h4>
+            <p>${loc.location_id} • ${loc.address}</p>
+          </div>
+          <span class="loc-distance">${distText}</span>
+        `;
+        
+        list.appendChild(item);
+      });
+    }
+
+    function selectLocation(id) {
+      state.selectedLocationId = id;
+      document.getElementById('checkinBtn').disabled = false;
+      renderLocations();
+    }
+
+    function filterLocations() {
+      renderLocations();
+    }
+
+    // РУЧНИЙ ЧЕКІН
+    async function submitManualCheckin() {
+      if (!state.selectedLocationId) return;
+      
+      const btn = document.getElementById('checkinBtn');
+      const spinner = document.getElementById('checkinSpinner');
+      
+      btn.style.display = 'none';
+      spinner.style.display = 'block';
+      
+      const timestamp = new Date().toISOString();
+      const matchedLoc = state.locations.find(l => l.location_id === state.selectedLocationId);
+      
+      let distance = null;
+      if (state.currentCoords && matchedLoc) {
+        distance = calculateDistance(
+          state.currentCoords.latitude,
+          state.currentCoords.longitude,
+          matchedLoc.latitude,
+          matchedLoc.longitude
+        );
+      }
+      
+      const event = {
+        event_uuid: generateUUID(),
+        event_type: "manual_checkin",
+        timestamp: timestamp,
+        payload: {
+          location_id: state.selectedLocationId,
+          enter_time: timestamp,
+          exit_time: timestamp,
+          duration_seconds: 0,
+          enter_lat: state.currentCoords ? state.currentCoords.latitude : null,
+          enter_lng: state.currentCoords ? state.currentCoords.longitude : null,
+          exit_lat: state.currentCoords ? state.currentCoords.latitude : null,
+          exit_lng: state.currentCoords ? state.currentCoords.longitude : null,
+          accuracy_m: state.gpsAccuracy,
+          matched_distance_m: distance ? Math.round(distance) : null,
+          source: state.currentCoords ? "manual" : "manual_no_gps",
+          offline_synced: false
+        }
+      };
+      
+      // Додаємо в чергу
+      state.offlineQueue.push({
+        event_uuid: event.event_uuid,
+        event_type: event.event_type,
+        timestamp: event.timestamp,
+        payload: event.payload
+      });
+      
+      saveOfflineQueue();
+      updateQueueUI();
+      
+      // Скидання вибору
+      state.selectedLocationId = null;
+      btn.disabled = true;
+      btn.style.display = 'block';
+      spinner.style.display = 'none';
+      
+      alert("Ручний чек-ін успішно додано в чергу та буде синхронізовано.");
+      
+      renderLocations();
+      processQueue();
+    }
+
+    // СИНХРОНІЗАЦІЯ ТА ЧЕРГА (OFFLINE SYNC)
+    function loadOfflineQueue() {
+      const q = localStorage.getItem('tracker_queue');
+      state.offlineQueue = q ? JSON.parse(q) : [];
+      updateQueueUI();
+    }
+
+    function saveOfflineQueue() {
+      localStorage.setItem('tracker_queue', JSON.stringify(state.offlineQueue));
+    }
+
+    function updateQueueUI() {
+      document.getElementById('queueText').innerText = `Черга: ${state.offlineQueue.length}`;
+    }
+
+    function queueOrSend(actionPayload) {
+      // Для shift/start та shift/end передається об'єкт типу: { action: "...", shift_id: "..." }
+      // Для зручності записуємо ці події безпосередньо через API. Якщо помилка мережі — кладемо в чергу логів
+      if (navigator.onLine) {
+        apiCall(actionPayload.action, actionPayload).then(res => {
+          if (!res.ok) {
+            queueFailedAction(actionPayload);
+          }
+        }).catch(err => {
+          queueFailedAction(actionPayload);
+        });
+      } else {
+        queueFailedAction(actionPayload);
+      }
+    }
+
+    function queueFailedAction(payload) {
+      // Зберігаємо подію як лог для відправки при появі мережі
+      state.offlineQueue.push({
+        event_uuid: generateUUID(),
+        event_type: "log",
+        timestamp: new Date().toISOString(),
+        payload: {
+          message: `Shift Action Failed: ${payload.action}`,
+          details: payload
+        }
+      });
+      saveOfflineQueue();
+      updateQueueUI();
+    }
+
+    async function processQueue() {
+      if (state.syncing || state.offlineQueue.length === 0 || !navigator.onLine || !state.token) return;
+      
+      state.syncing = true;
+      const batchToSync = [...state.offlineQueue];
+      
+      try {
+        const response = await apiCall("events/batch", {
+          token: state.token,
+          courier_id: state.courierId,
+          shift_id: state.shiftId,
+          batch: batchToSync
+        });
+        
+        if (response.ok) {
+          // Видаляємо успішно відправлені події
+          state.offlineQueue = state.offlineQueue.filter(item => 
+            !batchToSync.some(b => b.event_uuid === item.event_uuid)
+          );
+          saveOfflineQueue();
+          updateQueueUI();
+        }
+      } catch (err) {
+        console.error("Синхронізація не вдалася: ", err);
+      } finally {
+        state.syncing = false;
+      }
+    }
+
+    // API ХЕЛПЕР
+    async function apiCall(action, data) {
+      const url = `${WEB_APP_URL}?action=${action}`;
+      
+      // Надсилаємо як text/plain з JSON рядком для сумісності з Apps Script e.postData.contents
+      const response = await fetch(url, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify(data)
+      });
+      
+      return await response.json();
+    }
+
+    // ГЕНЕРАТОР UUID
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Expo / React Native
+.expo/*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Clasp / Google Apps Script
+.clasprc.json
+clasp-config.json
+
+# Builds
+web-build/
+dist/
+build/
+*.apk
+*.aab
+
+# Local env files
+.env*.local
+.env
