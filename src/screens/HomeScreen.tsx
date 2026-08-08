@@ -48,6 +48,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       const hasGps = await LocationService.isLocationEnabled();
       setGpsStatus(hasGps ? 'Увімкнено (Висока точність)' : 'GPS вимкнено на пристрої!');
+
+      // Автоматичне оновлення списку точок (якщо локальний кеш порожній або застарілий)
+      try {
+        const cachedLocations = await StorageService.getLocations();
+        const localVersion = cachedLocations.length > 0 ? await StorageService.getPointsVersion() : 0;
+        
+        const response = await ApiService.getPoints(token, localVersion);
+        if (response.ok && response.points) {
+          await StorageService.setLocations(response.points);
+          await StorageService.setPointsVersion(response.points_version);
+          console.log(`Auto-downloaded ${response.points.length} locations. Version: ${response.points_version}`);
+        }
+      } catch (err) {
+        console.warn('Не вдалося автоматично оновити точки:', err);
+      }
     };
 
     initData();

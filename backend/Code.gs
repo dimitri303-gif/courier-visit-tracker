@@ -613,7 +613,7 @@ function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, statu
   } else {
     // Додаємо новий рядок
     var rowNum = sheet.getLastRow() + 1;
-    var mapLinkFormula = '=HYPERLINK("https://www.google.com/maps/search/?api=1&query=" & D' + rowNum + ' & "," & E' + rowNum + '; "Показати на карті")';
+    var mapLinkFormula = '=HYPERLINK("https://www.google.com/maps/search/?api=1&query=" & SUBSTITUTE(D' + rowNum + '; ","; ".") & "," & SUBSTITUTE(E' + rowNum + '; ","; "."); "Показати на карті")';
     
     sheet.appendRow([
       courierId,

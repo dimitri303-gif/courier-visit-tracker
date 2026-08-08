@@ -41,6 +41,17 @@ export const LocationService = {
    * Потрібно запросити спочатку foreground, а потім background дозвіл
    */
   async requestPermissions(): Promise<boolean> {
+    try {
+      const { status: fgStatusExisting } = await Location.getForegroundPermissionsAsync();
+      const { status: bgStatusExisting } = await Location.getBackgroundPermissionsAsync();
+      
+      if (fgStatusExisting === 'granted' && bgStatusExisting === 'granted') {
+        return true;
+      }
+    } catch (e) {
+      console.warn('Error checking permissions status:', e);
+    }
+
     const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
     if (fgStatus !== 'granted') {
       await SyncService.queueLog('permission_denied', 'Foreground location permission denied');
@@ -107,7 +118,17 @@ export const LocationService = {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return null;
 
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      // Створюємо проміс тайм-ауту на 5 секунд для запобігання зависанню GPS
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Location request timed out')), 5000)
+      );
+
+      // Запускаємо паралельно запит геолокації та тайм-аут
+      const loc = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        timeoutPromise
+      ]);
+
       return {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
