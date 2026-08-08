@@ -70,7 +70,8 @@ export const ApiService = {
     platform: string,
     appVersion: string,
     startTime: string,
-    coords: { latitude: number; longitude: number; accuracy_m: number } | null
+    coords: { latitude: number; longitude: number; accuracy_m: number } | null,
+    battery: number | null
   ): Promise<any> {
     return this.post('shift/start', {
       token,
@@ -81,6 +82,7 @@ export const ApiService = {
       app_version: appVersion,
       start_time: startTime,
       location: coords,
+      battery,
     });
   },
 
@@ -89,7 +91,8 @@ export const ApiService = {
     shiftId: string,
     courierId: string,
     endTime: string,
-    coords: { latitude: number; longitude: number; accuracy_m: number } | null
+    coords: { latitude: number; longitude: number; accuracy_m: number } | null,
+    battery: number | null
   ): Promise<any> {
     return this.post('shift/end', {
       token,
@@ -97,6 +100,7 @@ export const ApiService = {
       courier_id: courierId,
       end_time: endTime,
       location: coords,
+      battery,
     });
   },
 

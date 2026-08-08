@@ -1,5 +1,6 @@
 import { Location, StorageService } from './storage';
 import { SyncService } from './sync';
+import * as Battery from 'expo-battery';
 
 export interface LocationState {
   location_id: string;
@@ -76,10 +77,19 @@ export const VisitDetector = {
       if (nowMs - lastHeartbeat >= 10 * 60 * 1000) {
         await StorageService.setLastHeartbeatTime(String(nowMs));
         
+        let battery: number | null = null;
+        try {
+          const level = await Battery.getBatteryLevelAsync();
+          battery = Math.round(level * 100);
+        } catch (err) {
+          console.warn('Не вдалося отримати заряд батареї для heartbeat:', err);
+        }
+        
         await SyncService.queueLog('heartbeat', 'Periodic location heartbeat', JSON.stringify({
           latitude: coords.latitude,
           longitude: coords.longitude,
-          accuracy_m: Math.round(coords.accuracy || 10)
+          accuracy_m: Math.round(coords.accuracy || 10),
+          battery: battery
         }));
         
         // Запускаємо фонову синхронізацію

@@ -235,7 +235,8 @@ function handleShiftStart(data, courier) {
   // Оновлюємо статус розташування кур'єра
   try {
     var loc = data.location || {};
-    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, null, "active");
+    var battery = data.battery !== undefined ? data.battery : null;
+    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, battery, "active");
   } catch(e) {
     Logger.log("Error updating location status: " + e.toString());
   }
@@ -296,7 +297,8 @@ function handleShiftEnd(data, courier) {
   // Оновлюємо статус розташування кур'єра
   try {
     var loc = data.location || {};
-    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, null, "ended");
+    var battery = data.battery !== undefined ? data.battery : null;
+    updateCourierStatus(courierId, courier.name, loc.latitude, loc.longitude, loc.accuracy_m, battery, "ended");
   } catch(e) {
     Logger.log("Error updating location status: " + e.toString());
   }
@@ -456,7 +458,8 @@ function handleEventsBatch(data, courier) {
         if (payload.event_type === "heartbeat" && payload.details) {
           var detailsObj = JSON.parse(payload.details);
           if (detailsObj && detailsObj.latitude && detailsObj.longitude) {
-            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, null, "active");
+            var battery = detailsObj.battery !== undefined ? detailsObj.battery : null;
+            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, battery, "active");
           }
         }
       } catch(e) {}

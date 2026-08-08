@@ -13,6 +13,7 @@ import { LocationService } from '../services/location';
 import { ApiService } from '../services/api';
 import { SyncService, generateUUID } from '../services/sync';
 import { VisitDetector } from '../services/detector';
+import * as Battery from 'expo-battery';
 
 interface HomeScreenProps {
   courierName: string;
@@ -136,8 +137,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       // Запускаємо фонове відстеження
       await LocationService.startBackgroundTracking();
 
+      // Отримуємо поточний рівень заряду батареї
+      let battery: number | null = null;
+      try {
+        const level = await Battery.getBatteryLevelAsync();
+        battery = Math.round(level * 100);
+      } catch (err) {
+        console.warn('Не вдалося отримати заряд батареї для старту зміни:', err);
+      }
+
       // Відправляємо подію на сервер
-      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', '1.0.0', startTime, coords)
+      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', '1.0.0', startTime, coords, battery)
         .catch(async (e) => {
           // Якщо немає інтернету, записуємо збій у логи (подія відправиться пізніше)
           await SyncService.queueLog('shift_start_offline', `Start shift offline saved: ${shiftId}`, e.toString());
@@ -182,8 +192,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               await StorageService.setActiveShift(null);
               setActiveShift(null);
 
+              // Отримуємо поточний рівень заряду батареї
+              let battery: number | null = null;
+              try {
+                const level = await Battery.getBatteryLevelAsync();
+                battery = Math.round(level * 100);
+              } catch (err) {
+                console.warn('Не вдалося отримати заряд батареї для завершення зміни:', err);
+              }
+
               // 5. Відправляємо на сервер
-              ApiService.endShift(token, shiftId, courierId, endTime, coords)
+              ApiService.endShift(token, shiftId, courierId, endTime, coords, battery)
                 .catch(async (e) => {
                   await SyncService.queueLog('shift_end_offline', `End shift offline saved: ${shiftId}`, e.toString());
                 });
