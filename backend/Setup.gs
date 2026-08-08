@@ -20,7 +20,7 @@ function setupDatabase() {
   ]);
   
   setupSheet(ss, "Locations", [
-    "location_id", "name", "address", "latitude", "longitude", "radius_m", "indoor", "active", "updated_at", "notes", "region"
+    "location_id", "name", "address", "latitude", "longitude", "radius_m", "indoor", "active", "updated_at", "notes", "region", "map_link"
   ]);
   
   setupSheet(ss, "Shifts", [

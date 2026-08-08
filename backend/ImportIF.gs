@@ -10,6 +10,9 @@ function importAndGeocodeIFLocations() {
     return;
   }
   
+  // Встановлюємо заголовок для посилань на карти в стовпчик L (12)
+  targetSheet.getRange(1, 12).setValue("map_link");
+  
   // 1. Відкриваємо джерело з адресами
   var sourceUrl = "https://docs.google.com/spreadsheets/d/17tqftI59LrdB6TaAKBr53GRlQ_CC6aWFNP6t6j3aSjc/edit#gid=0";
   var sourceSS;
@@ -112,6 +115,9 @@ function importAndGeocodeIFLocations() {
     
     // 6. Формуємо рядок для запису
     var locationId = "L" + padZero(nextIdNum, 3);
+    var targetRowIndex = targetSheet.getLastRow() + 1;
+    var mapLinkFormula = "=HYPERLINK(\"https://www.google.com/maps/search/?api=1&query=\"&SUBSTITUTE(D" + targetRowIndex + ";\",\";\".\")&\",\"&SUBSTITUTE(E" + targetRowIndex + ";\",\";\".\");\"Карта\")";
+    
     var newRow = [
       locationId,
       cleanName,
@@ -123,7 +129,8 @@ function importAndGeocodeIFLocations() {
       "true", // active
       nowStr, // updated_at
       "Імпортовано: " + geocodeStatus, // notes
-      "Івано-Франківськ" // region
+      "Івано-Франківськ", // region
+      mapLinkFormula // map_link (стовпчик L)
     ];
     
     targetSheet.appendRow(newRow);
@@ -158,3 +165,33 @@ function incrementPointsVersion(ss) {
     }
   }
 }
+
+/**
+ * Додає формулу посилання на карту (Google Maps) у стовпчик L для всіх існуючих локацій.
+ * Запустіть цю функцію ОДИН РАЗ, щоб створити посилання для вже імпортованих точок.
+ */
+function addMapLinksToAllLocations() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Locations");
+  if (!sheet) {
+    Logger.log("Помилка: не знайдено аркуш Locations");
+    return;
+  }
+  
+  // Встановлюємо заголовок стовпчика L (стовпчик 12)
+  sheet.getRange(1, 12).setValue("map_link");
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  
+  var formulas = [];
+  for (var r = 2; r <= lastRow; r++) {
+    var formula = "=HYPERLINK(\"https://www.google.com/maps/search/?api=1&query=\"&SUBSTITUTE(D" + r + ";\",\";\".\")&\",\"&SUBSTITUTE(E" + r + ";\",\";\".\");\"Карта\")";
+    formulas.push([formula]);
+  }
+  
+  // Записуємо формули одним пакетом для швидкості
+  sheet.getRange(2, 12, formulas.length, 1).setFormulas(formulas);
+  Logger.log("Успішно додано посилання на карту для " + formulas.length + " точок!");
+}
+
