@@ -47,10 +47,10 @@ function importAndGeocodeIFLocations() {
   
   Logger.log("Починаємо імпорт. Наступний вільний ID: L" + padZero(nextIdNum, 3));
   
-  // Пропускаємо заголовок (рядки 0 та 1)
-  for (var r = 2; r < sourceData.length; r++) {
-    var rawName = String(sourceData[r][1] || "").trim();
-    var rawAddress = String(sourceData[r][2] || "").trim();
+  // Пропускаємо заголовок (рядок 0)
+  for (var r = 1; r < sourceData.length; r++) {
+    var rawName = String(sourceData[r][0] || "").trim();
+    var rawAddress = String(sourceData[r][1] || "").trim();
     
     if (!rawName || !rawAddress || rawName === "Клієнт") {
       continue;
