@@ -100,7 +100,7 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
       setShowRouteId(null);
       Alert.alert(
         'Сесію очікування завершено',
-        'Панель кур'єра автоматично згорнута через 45 секунд бездіяльності.'
+        "Панель кур'єра автоматично згорнута через 45 секунд бездіяльності."
       );
     }, 45000);
   };

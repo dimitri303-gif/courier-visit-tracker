@@ -97,7 +97,7 @@ export const LocationService = {
           notificationBody: 'Додаток фіксує ваші візити на точки доставки.',
           notificationColor: '#6366F1'
         },
-        pausesLocationUpdatesAutomatically: false
+        pausesUpdatesAutomatically: false
       });
       
       await SyncService.queueLog('tracking_started', 'Background location tracking successfully started');

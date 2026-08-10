@@ -378,7 +378,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnDanger: {
-    background: '#ef4444',
     backgroundColor: '#ef4444',
   },
   btnSecondary: {
