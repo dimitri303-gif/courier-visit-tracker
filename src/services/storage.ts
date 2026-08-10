@@ -36,6 +36,7 @@ const KEYS = {
   OFFLINE_QUEUE: '@offline_queue',
   LAST_HEARTBEAT: '@last_heartbeat',
   USER_ROLE: '@user_role',
+  USER_REGION: '@user_region',
 };
 
 // Дефолтна адреса бекенду (може бути змінена в екрані Debug)
@@ -150,6 +151,7 @@ export const StorageService = {
     await AsyncStorage.removeItem(KEYS.COURIER_NAME);
     await AsyncStorage.removeItem(KEYS.ACTIVE_SHIFT);
     await AsyncStorage.removeItem(KEYS.USER_ROLE);
+    await AsyncStorage.removeItem(KEYS.USER_REGION);
   },
 
   async getRole(): Promise<'courier' | 'logist' | null> {
@@ -161,6 +163,18 @@ export const StorageService = {
       await AsyncStorage.setItem(KEYS.USER_ROLE, role);
     } else {
       await AsyncStorage.removeItem(KEYS.USER_ROLE);
+    }
+  },
+
+  async getRegion(): Promise<string | null> {
+    return AsyncStorage.getItem(KEYS.USER_REGION);
+  },
+
+  async setRegion(region: string | null): Promise<void> {
+    if (region) {
+      await AsyncStorage.setItem(KEYS.USER_REGION, region);
+    } else {
+      await AsyncStorage.removeItem(KEYS.USER_REGION);
     }
   }
 };

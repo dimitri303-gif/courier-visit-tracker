@@ -14,7 +14,7 @@ import { ApiService } from '../services/api';
 import { StorageService } from '../services/storage';
 
 interface LoginScreenProps {
-  onLoginSuccess: (token: string, name: string, courierId: string, role: 'courier' | 'logist') => void;
+  onLoginSuccess: (token: string, name: string, courierId: string, role: 'courier' | 'logist', region: string) => void;
   onNavigateToDebug: () => void;
 }
 
@@ -43,11 +43,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onNavi
         await StorageService.setCourierName(response.name);
         await StorageService.setPointsVersion(response.points_version);
         await StorageService.setRole(response.role || 'courier');
+        await StorageService.setRegion(response.region || '');
         if (response.config) {
           await StorageService.setConfig(response.config);
         }
         
-        onLoginSuccess(response.token, response.name, response.courier_id, response.role || 'courier');
+        onLoginSuccess(
+          response.token,
+          response.name,
+          response.courier_id,
+          response.role || 'courier',
+          response.region || ''
+        );
       } else {
         setError(response.error || 'Помилка входу');
       }

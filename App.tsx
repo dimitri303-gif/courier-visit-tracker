@@ -27,6 +27,7 @@ export default function App() {
   const [courierId, setCourierId] = useState('');
   const [token, setToken] = useState('');
   const [role, setRole] = useState<'courier' | 'logist'>('courier');
+  const [userRegion, setUserRegion] = useState('');
 
   useEffect(() => {
     const bootstrapAsync = async () => {
@@ -39,12 +40,14 @@ export default function App() {
         const savedName = await StorageService.getCourierName();
         const savedId = await StorageService.getCourierId();
         const savedRole = await StorageService.getRole();
+        const savedRegion = await StorageService.getRegion();
 
         if (savedToken && savedName && savedId) {
           setToken(savedToken);
           setCourierName(savedName);
           setCourierId(savedId);
           setRole(savedRole || 'courier');
+          setUserRegion(savedRegion || '');
           setScreen(savedRole === 'logist' ? 'logist_dashboard' : 'home');
           
           // Запускаємо автоматичну фонову синхронізацію при старті
@@ -62,11 +65,18 @@ export default function App() {
     bootstrapAsync();
   }, []);
 
-  const handleLoginSuccess = (userToken: string, userName: string, userId: string, userRole: 'courier' | 'logist') => {
+  const handleLoginSuccess = (
+    userToken: string,
+    userName: string,
+    userId: string,
+    userRole: 'courier' | 'logist',
+    region: string
+  ) => {
     setToken(userToken);
     setCourierName(userName);
     setCourierId(userId);
     setRole(userRole);
+    setUserRegion(region);
     setScreen(userRole === 'logist' ? 'logist_dashboard' : 'home');
   };
 
@@ -78,6 +88,7 @@ export default function App() {
       setCourierName('');
       setCourierId('');
       setRole('courier');
+      setUserRegion('');
       setScreen('login');
     } catch (e) {
       console.error('Помилка виходу з системи:', e);
@@ -121,6 +132,7 @@ export default function App() {
           logistName={courierName}
           logistId={courierId}
           token={token}
+          logistRegion={userRegion}
           onLogout={handleLogout}
           onNavigateToDebug={() => setScreen('debug')}
         />

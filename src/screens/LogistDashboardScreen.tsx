@@ -20,6 +20,7 @@ interface LogistDashboardScreenProps {
   logistName: string;
   logistId: string;
   token: string;
+  logistRegion: string;
   onLogout: () => void;
   onNavigateToDebug: () => void;
 }
@@ -41,6 +42,7 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
   logistName,
   logistId,
   token,
+  logistRegion,
   onLogout,
   onNavigateToDebug,
 }) => {
@@ -173,7 +175,7 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
       <View style={styles.header}>
         <View>
           <Text style={styles.logistName}>{logistName}</Text>
-          <Text style={styles.roleText}>Логіст • Івано-Франківськ</Text>
+          <Text style={styles.roleText}>Логіст • {logistRegion || 'Завантаження...'}</Text>
         </View>
         <TouchableOpacity style={styles.debugBtn} onPress={onNavigateToDebug}>
           <Text style={styles.debugBtnText}>⚙️</Text>
