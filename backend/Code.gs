@@ -437,7 +437,7 @@ function handleEventsBatch(data, courier) {
       // Оновлюємо розташування кур'єра за візитом
       try {
         if (payload.enter_lat && payload.enter_lng) {
-          updateCourierStatus(courierId, name, payload.enter_lat, payload.enter_lng, payload.accuracy_m, null, "active");
+          updateCourierStatus(courierId, name, payload.enter_lat, payload.enter_lng, payload.accuracy_m, null, null);
         }
       } catch(e) {}
       
@@ -474,7 +474,7 @@ function handleEventsBatch(data, courier) {
           var detailsObj = JSON.parse(payload.details);
           if (detailsObj && detailsObj.latitude && detailsObj.longitude) {
             var battery = detailsObj.battery !== undefined ? detailsObj.battery : null;
-            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, battery, "active");
+            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, battery, null);
           }
         }
       } catch(e) {}
