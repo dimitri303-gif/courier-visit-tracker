@@ -35,46 +35,63 @@ export const ManualCheckinScreen: React.FC<ManualCheckinScreenProps> = ({ onNavi
 
   useEffect(() => {
     const fetchLocationAndPoints = async () => {
+      // 1. Спочатку завантажуємо та відображаємо точки з локального сховища миттєво
+      let cachedPoints: NearbyLocation[] = [];
+      try {
+        cachedPoints = await StorageService.getLocations();
+        setLocations(cachedPoints);
+      } catch (e) {
+        console.error('Помилка завантаження точок з кешу:', e);
+      }
+
+      // 2. Паралельно запитуємо геолокацію
       let coords: Location.LocationObjectCoords | null = null;
       let accuracy: number | null = null;
 
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({
+          // Створюємо проміс тайм-ауту на 6 секунд
+          const timeoutPromise = new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error('GPS timeout')), 6000)
+          );
+
+          // Створюємо запит координат
+          const gpsPromise = Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           });
-          coords = loc.coords;
-          accuracy = Math.round(loc.coords.accuracy || 0);
-          setCurrentCoords(coords);
-          setGpsAccuracy(accuracy);
+
+          // Запускаємо гонку
+          const loc = await Promise.race([gpsPromise, timeoutPromise]);
+
+          if (loc) {
+            coords = loc.coords;
+            accuracy = Math.round(loc.coords.accuracy || 0);
+            setCurrentCoords(coords);
+            setGpsAccuracy(accuracy);
+
+            // Якщо координати отримано, перераховуємо відстані та сортуємо точки
+            if (cachedPoints.length > 0) {
+              const nearbyPoints = cachedPoints.map((locItem) => ({
+                ...locItem,
+                distance: calculateDistance(
+                  coords!.latitude,
+                  coords!.longitude,
+                  locItem.latitude,
+                  locItem.longitude
+                ),
+              }));
+
+              nearbyPoints.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+              setLocations(nearbyPoints);
+            }
+          }
         }
       } catch (err) {
         console.warn('Не вдалося отримати GPS координати для ручного чекіну:', err);
       } finally {
         setLoadingGps(false);
       }
-
-      // Завантажуємо точки з локального сховища
-      const cachedPoints = await StorageService.getLocations();
-      let nearbyPoints: NearbyLocation[] = [...cachedPoints];
-
-      // Якщо координати доступні, розраховуємо відстані та сортуємо
-      if (coords) {
-        nearbyPoints = nearbyPoints.map((loc) => ({
-          ...loc,
-          distance: calculateDistance(
-            coords!.latitude,
-            coords!.longitude,
-            loc.latitude,
-            loc.longitude
-          ),
-        }));
-        
-        nearbyPoints.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-      }
-
-      setLocations(nearbyPoints);
     };
 
     fetchLocationAndPoints();
