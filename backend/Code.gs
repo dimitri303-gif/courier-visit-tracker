@@ -149,9 +149,16 @@ function doPost(e) {
     if (action === "shift/end") {
       return handleShiftEnd(payload, courier);
     }
-    
+        
     if (action === "events/batch") {
       return handleEventsBatch(payload, courier);
+    }
+    
+    if (action === "logist/couriers") {
+      if (courier.role !== "logist") {
+        return jsonResponse({ ok: false, error: "Access denied: not a logist" });
+      }
+      return handleGetLogistCouriers(payload, courier);
     }
     
   } catch (err) {
@@ -178,10 +185,16 @@ function handleLogin(data) {
     return jsonResponse({ ok: false, error: "courier_id and pin are required" });
   }
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Couriers");
-  var rows = sheet.getDataRange().getValues();
+  var isLogist = String(courierId).toUpperCase().indexOf("LO") === 0;
+  var sheetName = isLogist ? "Logists" : "Couriers";
   
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return jsonResponse({ ok: false, error: "Sheet " + sheetName + " not found" });
+  }
+  
+  var rows = sheet.getDataRange().getValues();
   var pinHash = hashPin(pin);
   
   for (var i = 1; i < rows.length; i++) {
@@ -192,7 +205,7 @@ function handleLogin(data) {
     
     if (sheetCourierId === courierId) {
       if (active !== "true") {
-        return jsonResponse({ ok: false, error: "Courier account is deactivated" });
+        return jsonResponse({ ok: false, error: (isLogist ? "Logist" : "Courier") + " account is deactivated" });
       }
       
       if (sheetPinHash === pinHash) {
@@ -209,6 +222,7 @@ function handleLogin(data) {
           courier_id: courierId,
           name: String(row[1]),
           token: token,
+          role: isLogist ? "logist" : "courier",
           points_version: parseInt(config.points_version || 1),
           config: config
         });
@@ -218,7 +232,7 @@ function handleLogin(data) {
     }
   }
   
-  return jsonResponse({ ok: false, error: "Courier ID not found" });
+  return jsonResponse({ ok: false, error: (isLogist ? "Logist" : "Courier") + " not found" });
 }
 
 /**
@@ -504,20 +518,152 @@ function getSettings() {
  */
 function getCourierByToken(token) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Шукаємо в Couriers
   var sheet = ss.getSheetByName("Couriers");
   var rows = sheet.getDataRange().getValues();
-  
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][4]) === token) { // token column
       return {
         courier_id: String(rows[i][0]),
         name: String(rows[i][1]),
         active: String(rows[i][5]) === "true",
-        region: String(rows[i][8] || "").trim() // 9th column (index 8)
+        region: String(rows[i][8] || "").trim(),
+        role: "courier"
       };
     }
   }
+  
+  // 2. Якщо не знайдено, шукаємо в Logists
+  var logistsSheet = ss.getSheetByName("Logists");
+  if (logistsSheet) {
+    var logistsRows = logistsSheet.getDataRange().getValues();
+    for (var i = 1; i < logistsRows.length; i++) {
+      if (String(logistsRows[i][4]) === token) { // token column
+        return {
+          courier_id: String(logistsRows[i][0]),
+          name: String(logistsRows[i][1]),
+          active: String(logistsRows[i][5]) === "true",
+          region: String(logistsRows[i][8] || "").trim(),
+          role: "logist"
+        };
+      }
+    }
+  }
+  
   return null;
+}
+
+/**
+ * Отримує список кур'єрів для логіста з його регіону та їхній поточний статус
+ */
+function handleGetLogistCouriers(data, logist) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Отримуємо список усіх активних кур'єрів з регіону логіста
+  var couriersSheet = ss.getSheetByName("Couriers");
+  if (!couriersSheet) {
+    return jsonResponse({ ok: false, error: "Couriers sheet not found" });
+  }
+  var couriersRows = couriersSheet.getDataRange().getValues();
+  
+  var regionCouriers = {};
+  for (var i = 1; i < couriersRows.length; i++) {
+    var cId = String(couriersRows[i][0]);
+    var cName = String(couriersRows[i][1]);
+    var cPhone = String(couriersRows[i][2]);
+    var cActive = String(couriersRows[i][5]);
+    var cRegion = String(couriersRows[i][8] || "").trim();
+    
+    if (cRegion === logist.region && cActive === "true") {
+      regionCouriers[cId] = {
+        courier_id: cId,
+        name: cName,
+        phone: cPhone
+      };
+    }
+  }
+  
+  // 2. Отримуємо статус розташування кур'єрів з CourierStatus
+  var statusSheet = ss.getSheetByName("CourierStatus");
+  if (!statusSheet) {
+    return jsonResponse({ ok: false, error: "CourierStatus sheet not found" });
+  }
+  var statusRows = statusSheet.getDataRange().getValues();
+  
+  var statusesMap = {};
+  for (var i = 1; i < statusRows.length; i++) {
+    var cId = String(statusRows[i][0]);
+    if (regionCouriers[cId]) {
+      var lastSeen = statusRows[i][2];
+      var lastSeenStr = "";
+      if (lastSeen instanceof Date) {
+        lastSeenStr = lastSeen.toISOString();
+      } else if (lastSeen) {
+        lastSeenStr = new Date(lastSeen).toISOString();
+      }
+      
+      statusesMap[cId] = {
+        last_seen: lastSeenStr,
+        latitude: statusRows[i][3] ? parseFloat(statusRows[i][3]) : null,
+        longitude: statusRows[i][4] ? parseFloat(statusRows[i][4]) : null,
+        accuracy_m: statusRows[i][5] ? parseFloat(statusRows[i][5]) : null,
+        battery_percent: statusRows[i][6] ? parseFloat(statusRows[i][6]) : null,
+        status: String(statusRows[i][7])
+      };
+    }
+  }
+  
+  // 3. Отримуємо список відвіданих точок сьогодні
+  var visitsSheet = ss.getSheetByName("Visits");
+  var visitedMap = {};
+  if (visitsSheet) {
+    var visitsRows = visitsSheet.getDataRange().getValues();
+    var todayPrefix = Utilities.formatDate(new Date(), "GMT+3", "yyyy-MM-dd");
+    
+    for (var i = 1; i < visitsRows.length; i++) {
+      var cId = String(visitsRows[i][2]);
+      var locId = String(visitsRows[i][4]);
+      var enterTime = String(visitsRows[i][5]);
+      
+      if (regionCouriers[cId] && enterTime.indexOf(todayPrefix) === 0) {
+        if (!visitedMap[cId]) {
+          visitedMap[cId] = [];
+        }
+        if (visitedMap[cId].indexOf(locId) === -1) {
+          visitedMap[cId].push(locId);
+        }
+      }
+    }
+  }
+  
+  // 4. Об'єднуємо дані
+  var result = [];
+  for (var cId in regionCouriers) {
+    var s = statusesMap[cId] || {
+      last_seen: "",
+      latitude: null,
+      longitude: null,
+      accuracy_m: null,
+      battery_percent: null,
+      status: "ended"
+    };
+    
+    result.push({
+      courier_id: cId,
+      name: regionCouriers[cId].name,
+      phone: regionCouriers[cId].phone,
+      status: s.status,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      accuracy_m: s.accuracy_m,
+      battery_percent: s.battery_percent,
+      last_seen: s.last_seen,
+      visited_locations: visitedMap[cId] || []
+    });
+  }
+  
+  return jsonResponse({ ok: true, couriers: result });
 }
 
 /**

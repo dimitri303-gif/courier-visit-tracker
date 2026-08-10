@@ -23,6 +23,10 @@ function setupDatabase() {
     "location_id", "name", "address", "latitude", "longitude", "radius_m", "indoor", "active", "updated_at", "notes", "region", "map_link"
   ]);
   
+  setupSheet(ss, "Logists", [
+    "logist_id", "name", "phone", "pin_hash", "token", "active", "platform", "notes", "region"
+  ]);
+  
   setupSheet(ss, "Shifts", [
     "shift_id", "courier_id", "start_time", "end_time", "duration_minutes", "device_platform", "app_version", "device_id", "status", "notes"
   ]);
@@ -49,6 +53,9 @@ function setupDatabase() {
   
   // 3. Додавання тестових кур'єрів (якщо порожньо)
   setupSampleCouriers(ss);
+  
+  // 3.5. Додавання тестових логістів (якщо порожньо)
+  setupSampleLogists(ss);
   
   // 4. Додавання тестових локацій (якщо порожньо)
   setupSampleLocations(ss);
@@ -307,4 +314,23 @@ function createManualSheet() {
   
   Logger.log("Аркуш 'Мануал' успішно створено та оформлено!");
 }
+
+/**
+ * Додає тестового логіста у Logists
+ */
+function setupSampleLogists(ss) {
+  var sheet = ss.getSheetByName("Logists");
+  if (!sheet) return;
+  
+  if (sheet.getLastRow() <= 1) {
+    // PIN "1234" -> SHA-256: 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+    var logists = [
+      ["LO001", "Ігор Логіст", "+380679998877", "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", "", "true", "", "Тестовий логіст ІФ", "Івано-Франківськ"]
+    ];
+    
+    sheet.getRange(2, 1, logists.length, 9).setValues(logists);
+    Logger.log("Додано тестового логіста (Ігор: LO001/1234).");
+  }
+}
+
 
