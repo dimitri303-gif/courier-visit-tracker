@@ -16,8 +16,9 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ManualCheckinScreen } from './src/screens/ManualCheckinScreen';
 import { DebugScreen } from './src/screens/DebugScreen';
+import { LogistDashboardScreen } from './src/screens/LogistDashboardScreen';
 
-type ActiveScreen = 'login' | 'home' | 'manual_checkin' | 'debug';
+type ActiveScreen = 'login' | 'home' | 'manual_checkin' | 'debug' | 'logist_dashboard';
 
 export default function App() {
   const [screen, setScreen] = useState<ActiveScreen>('login');
@@ -25,6 +26,7 @@ export default function App() {
   const [courierName, setCourierName] = useState('');
   const [courierId, setCourierId] = useState('');
   const [token, setToken] = useState('');
+  const [role, setRole] = useState<'courier' | 'logist'>('courier');
 
   useEffect(() => {
     const bootstrapAsync = async () => {
@@ -36,12 +38,14 @@ export default function App() {
         const savedToken = await StorageService.getToken();
         const savedName = await StorageService.getCourierName();
         const savedId = await StorageService.getCourierId();
+        const savedRole = await StorageService.getRole();
 
         if (savedToken && savedName && savedId) {
           setToken(savedToken);
           setCourierName(savedName);
           setCourierId(savedId);
-          setScreen('home');
+          setRole(savedRole || 'courier');
+          setScreen(savedRole === 'logist' ? 'logist_dashboard' : 'home');
           
           // Запускаємо автоматичну фонову синхронізацію при старті
           SyncService.triggerSync();
@@ -58,11 +62,12 @@ export default function App() {
     bootstrapAsync();
   }, []);
 
-  const handleLoginSuccess = (userToken: string, userName: string, userId: string) => {
+  const handleLoginSuccess = (userToken: string, userName: string, userId: string, userRole: 'courier' | 'logist') => {
     setToken(userToken);
     setCourierName(userName);
     setCourierId(userId);
-    setScreen('home');
+    setRole(userRole);
+    setScreen(userRole === 'logist' ? 'logist_dashboard' : 'home');
   };
 
   const handleLogout = async () => {
@@ -72,6 +77,7 @@ export default function App() {
       setToken('');
       setCourierName('');
       setCourierId('');
+      setRole('courier');
       setScreen('login');
     } catch (e) {
       console.error('Помилка виходу з системи:', e);
@@ -110,8 +116,17 @@ export default function App() {
       {screen === 'manual_checkin' && (
         <ManualCheckinScreen onNavigateBack={() => setScreen('home')} />
       )}
+      {screen === 'logist_dashboard' && (
+        <LogistDashboardScreen
+          logistName={courierName}
+          logistId={courierId}
+          token={token}
+          onLogout={handleLogout}
+          onNavigateToDebug={() => setScreen('debug')}
+        />
+      )}
       {screen === 'debug' && (
-        <DebugScreen token={token} onNavigateBack={() => setScreen(token ? 'home' : 'login')} />
+        <DebugScreen token={token} onNavigateBack={() => setScreen(token ? (role === 'logist' ? 'logist_dashboard' : 'home') : 'login')} />
       )}
     </View>
   );

@@ -116,5 +116,11 @@ export const ApiService = {
       shift_id: shiftId,
       batch: events,
     });
+  },
+
+  async getLogistCouriers(token: string): Promise<any> {
+    return this.post('logist/couriers', {
+      token,
+    });
   }
 };
