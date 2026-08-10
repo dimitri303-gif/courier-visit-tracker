@@ -223,6 +223,7 @@ function handleLogin(data) {
           name: String(row[1]),
           token: token,
           role: isLogist ? "logist" : "courier",
+          region: String(row[8] || "").trim(),
           points_version: parseInt(config.points_version || 1),
           config: config
         });
