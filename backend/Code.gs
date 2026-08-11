@@ -109,14 +109,16 @@ function doGet(e) {
       responseObj = jsonResponse({
         ok: true,
         status: "not_modified",
-        points_version: serverVersion
+        points_version: serverVersion,
+        config: config
       });
     } else {
       var points = getActiveLocations(courier.region);
       responseObj = jsonResponse({
         ok: true,
         points_version: serverVersion,
-        points: points
+        points: points,
+        config: config
       });
     }
   }
@@ -208,15 +210,23 @@ function doPost(e) {
       responseObj = jsonResponse({ ok: false, error: "Invalid POST action" });
     }
     
-    // Додаємо location_request у відповідь для кур'єра, якщо є активний запит від логіста
+    // Додаємо оновлені параметри у відповідь для кур'єра (config, points_version, location_request)
     if (courier && courier.role === "courier" && responseObj) {
-      if (hasPendingLocationRequest(courier.courier_id)) {
-        try {
-          var content = JSON.parse(responseObj.getContent());
+      try {
+        var content = JSON.parse(responseObj.getContent());
+        
+        // Додаємо прапорець запиту геоданих, якщо він є активним
+        if (hasPendingLocationRequest(courier.courier_id)) {
           content.location_request = true;
-          responseObj = jsonResponse(content);
-        } catch (e) {}
-      }
+        }
+        
+        // Завжди повертаємо актуальні налаштування та версію точок
+        var config = getSettings();
+        content.config = config;
+        content.points_version = parseInt(config.points_version || 1);
+        
+        responseObj = jsonResponse(content);
+      } catch (e) {}
     }
     
   } catch (err) {
@@ -991,7 +1001,14 @@ function checkAndAutoSetup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) return;
   
-  // 1. Перевірка CourierStatus на наявність 10-ї колонки (location_request)
+  // 1. Оновлення та перевірка налаштувань (додає відсутні ключі)
+  try {
+    setupDefaultSettings(ss);
+  } catch(e) {
+    Logger.log("Error running setupDefaultSettings: " + e.toString());
+  }
+  
+  // 2. Перевірка CourierStatus на наявність 10-ї колонки (location_request)
   var statusSheet = ss.getSheetByName("CourierStatus");
   if (statusSheet && statusSheet.getLastColumn() < 10) {
     setupDatabase();
@@ -1030,4 +1047,30 @@ function addNastiaLogistSilent(sheet) {
     "Івано-Франківськ"
   ]);
   Logger.log("Логіста Настю автоматично додано через фонову перевірку.");
+}
+
+/**
+ * Спеціальна функція для виклику з веб-дашборду (через google.script.run)
+ * для встановлення прапорця запиту геолокації.
+ */
+function requestCourierLocationFromDashboard(courierId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("CourierStatus");
+  if (!sheet) return { success: false, error: "CourierStatus sheet not found" };
+  
+  var rows = sheet.getDataRange().getValues();
+  var courierRowIndex = -1;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === courierId) {
+      courierRowIndex = i + 1;
+      break;
+    }
+  }
+  
+  if (courierRowIndex !== -1) {
+    sheet.getRange(courierRowIndex, 10).setValue("true"); // Set location_request to true in Column J (10th column)
+    return { success: true, message: "Запит надіслано успішно." };
+  } else {
+    return { success: false, error: "Кур'єра не знайдено." };
+  }
 }

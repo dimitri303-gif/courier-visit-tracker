@@ -95,22 +95,34 @@ function setupDefaultSettings(ss) {
   var sheet = ss.getSheetByName("Settings");
   if (!sheet) return;
   
-  // Якщо таблиця містить тільки заголовок
-  if (sheet.getLastRow() <= 1) {
-    var defaults = [
-      ["default_radius_m", "30"],
-      ["dwell_seconds", "60"],
-      ["location_interval_ms", "15000"],
-      ["distance_filter_m", "10"],
-      ["accuracy_ignore_m", "150"],
-      ["manual_checkin_enabled", "true"],
-      ["points_version", "1"],
-      ["max_stay_minutes", "240"],
-      ["heartbeat_interval_minutes", "10"]
-    ];
-    
-    sheet.getRange(2, 1, defaults.length, 2).setValues(defaults);
-    Logger.log("Налаштування за замовчуванням збережено.");
+  var defaults = [
+    ["default_radius_m", "30"],
+    ["dwell_seconds", "60"],
+    ["location_interval_ms", "15000"],
+    ["distance_filter_m", "10"],
+    ["accuracy_ignore_m", "150"],
+    ["manual_checkin_enabled", "true"],
+    ["points_version", "1"],
+    ["max_stay_minutes", "240"],
+    ["heartbeat_interval_minutes", "10"]
+  ];
+  
+  var data = sheet.getDataRange().getValues();
+  var existingKeys = {};
+  for (var i = 1; i < data.length; i++) {
+    var k = String(data[i][0]).trim();
+    if (k !== "") {
+      existingKeys[k] = true;
+    }
+  }
+  
+  for (var j = 0; j < defaults.length; j++) {
+    var defKey = defaults[j][0];
+    var defVal = defaults[j][1];
+    if (!existingKeys[defKey]) {
+      sheet.appendRow([defKey, defVal]);
+      Logger.log("Додано відсутнє налаштування: " + defKey + " = " + defVal);
+    }
   }
 }
 

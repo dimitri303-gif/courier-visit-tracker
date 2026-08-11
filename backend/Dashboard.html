@@ -880,6 +880,8 @@
         const card = document.createElement('div');
         card.className = `p-3 rounded-xl border transition-all hover:bg-slate-100 cursor-pointer ${isOnline ? 'bg-indigo-50/50 border-indigo-100' : 'bg-slate-50 border-slate-200'}`;
         
+        const isPending = status.location_request === true || status.location_request === "true";
+        
         card.innerHTML = `
           <div class="flex justify-between items-start">
             <div>
@@ -894,6 +896,12 @@
             <span>Батарея: <strong class="text-slate-700">${batteryText}</strong></span>
             <span>Синхр: <strong class="text-slate-700">${lastSeen}</strong></span>
           </div>
+          ${isOnline ? `
+            <button onclick="event.stopPropagation(); triggerLocationRequest('${status.courier_id}')" ${isPending ? 'disabled' : ''} 
+              class="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-amber-600 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1">
+              📡 ${isPending ? 'Очікування координат...' : 'Запросити оновлення GPS'}
+            </button>
+          ` : ''}
         `;
         
         // Zoom on click
@@ -916,6 +924,22 @@
         
         container.appendChild(card);
       });
+    }
+
+    function triggerLocationRequest(courierId) {
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (response && response.success) {
+            alert('Запит успішно надіслано! Телефон кур\'єра оновиться під час наступного зв\'язку.');
+            setTimeout(loadData, 500);
+          } else {
+            showErrorAlert('Помилка: ' + (response.error || 'Невідома помилка'));
+          }
+        })
+        .withFailureHandler(function(err) {
+          showErrorAlert('Помилка зв\'язку: ' + err.toString());
+        })
+        .requestCourierLocationFromDashboard(courierId);
     }
 
     // ==================== TABS RENDERING: LOCATIONS MAP ====================

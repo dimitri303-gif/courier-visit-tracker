@@ -37,12 +37,21 @@ export const VisitDetector = {
     try {
       detectorStates = {};
       
-      // Реєструємо інтерцептор для обробки запитів координат від логіста
+      // Реєструємо інтерцептор для автоматичної синхронізації налаштувань та запитів координат
       const { ApiService } = require('./api');
       ApiService.setResponseInterceptor((data: any) => {
-        if (data && data.location_request === true) {
-          console.log('[Detector] Отримано запит на оновлення координат від логіста!');
-          VisitDetector.forceLocationHeartbeat().catch(err => console.warn(err));
+        if (data) {
+          if (data.location_request === true) {
+            console.log('[Detector] Отримано запит на оновлення координат від логіста!');
+            VisitDetector.forceLocationHeartbeat().catch(err => console.warn(err));
+          }
+          if (data.config) {
+            console.log('[Detector] Автоматично оновлено конфігурацію з сервера.');
+            StorageService.setConfig(data.config).catch(err => console.warn(err));
+          }
+          if (data.points_version) {
+            StorageService.setPointsVersion(data.points_version).catch(err => console.warn(err));
+          }
         }
       });
     } catch (e) {
