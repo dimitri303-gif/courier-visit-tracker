@@ -574,12 +574,18 @@ function handleEventsBatch(data, courier) {
   if (newVisitRows.length > 0) {
     var visitStartRow = visitsSheet.getLastRow() + 1;
     visitsSheet.getRange(visitStartRow, 1, newVisitRows.length, 18).setValues(newVisitRows);
+    // Встановлюємо формат дати та часу (HH:mm:ss) для колонок enter_time, exit_time та created_at
+    visitsSheet.getRange(visitStartRow, 6, newVisitRows.length, 2).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    visitsSheet.getRange(visitStartRow, 17, newVisitRows.length, 1).setNumberFormat("dd.MM.yyyy HH:mm:ss");
   }
   
   // Батч-запис логів (один виклик setValues замість N appendRow)
   if (newLogRows.length > 0) {
     var logStartRow = logsSheet.getLastRow() + 1;
     logsSheet.getRange(logStartRow, 1, newLogRows.length, 8).setValues(newLogRows);
+    // Встановлюємо формат дати та часу (HH:mm:ss) для колонок timestamp та created_at
+    logsSheet.getRange(logStartRow, 6, newLogRows.length, 1).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    logsSheet.getRange(logStartRow, 8, newLogRows.length, 1).setNumberFormat("dd.MM.yyyy HH:mm:ss");
   }
   
   // Оновлюємо статус кур'єра один раз після запису всього батчу
