@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { ApiService } from '../services/api';
 import { StorageService } from '../services/storage';
+import Constants from 'expo-constants';
 
 interface LoginScreenProps {
   onLoginSuccess: (token: string, name: string, courierId: string, role: 'courier' | 'logist', region: string) => void;
@@ -119,6 +120,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onNavi
               <TouchableOpacity style={styles.debugLink} onPress={onNavigateToDebug}>
                 <Text style={styles.debugLinkText}>⚙️ Налаштування сервера</Text>
               </TouchableOpacity>
+              <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
             </>
           )}
         </View>
@@ -233,5 +235,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textDecorationLine: 'underline',
+  },
+  versionText: {
+    textAlign: 'center',
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 10,
   },
 });

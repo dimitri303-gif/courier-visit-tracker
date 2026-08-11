@@ -14,6 +14,7 @@ import { ApiService } from '../services/api';
 import { SyncService, generateUUID } from '../services/sync';
 import { VisitDetector } from '../services/detector';
 import * as Battery from 'expo-battery';
+import Constants from 'expo-constants';
 
 interface HomeScreenProps {
   courierName: string;
@@ -147,8 +148,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         console.warn('Не вдалося отримати заряд батареї для старту зміни:', err);
       }
 
-      // Відправляємо подію на сервер
-      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', '1.0.0', startTime, coords, battery)
+      // Відправляємо подію на сервер з актуальною версією додатка
+      const currentVersion = Constants.expoConfig?.version || '1.0.0';
+      ApiService.startShift(token, shiftId, courierId, 'expo_android', 'android', currentVersion, startTime, coords, battery)
         .catch(async (e) => {
           // Якщо немає інтернету, записуємо збій у логи (подія відправиться пізніше)
           await SyncService.queueLog('shift_start_offline', `Start shift offline saved: ${shiftId}`, e.toString());
