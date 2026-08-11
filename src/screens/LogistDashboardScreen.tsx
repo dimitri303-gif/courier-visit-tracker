@@ -35,6 +35,7 @@ interface CourierStatus {
   accuracy_m: number | null;
   battery_percent: number | null;
   last_seen: string;
+  location_request: boolean;
   visited_locations: string[]; // IDs
 }
 
@@ -52,6 +53,7 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [activeCourierId, setActiveCourierId] = useState<string | null>(null);
   const [showRouteId, setShowRouteId] = useState<string | null>(null);
+  const [localRequesting, setLocalRequesting] = useState<{ [key: string]: boolean }>({});
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -151,6 +153,28 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
       setShowRouteId(null);
     } else {
       setShowRouteId(courierId);
+    }
+  };
+
+  const handleForceRequestLocation = async (courierId: string) => {
+    resetAutocloseTimer();
+    setLocalRequesting(prev => ({ ...prev, [courierId]: true }));
+    try {
+      const response = await ApiService.requestCourierLocation(token, courierId);
+      if (response.ok) {
+        Alert.alert(
+          'Запит надіслано',
+          'Сигнал надіслано на сервер. Телефон кур\'єра автоматично оновлевить свої координати під час наступного обміну даними (упродовж кількох секунд).'
+        );
+        await fetchData(true);
+      } else {
+        Alert.alert('Помилка', response.error || 'Не вдалося надіслати запит');
+      }
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert('Помилка з\'єднання', 'Не вдалося зв\'язатися з сервером.');
+    } finally {
+      setLocalRequesting(prev => ({ ...prev, [courierId]: false }));
     }
   };
 
@@ -267,6 +291,27 @@ export const LogistDashboardScreen: React.FC<LogistDashboardScreenProps> = ({
                         </Text>
                       </TouchableOpacity>
                     </View>
+
+                    {/* Кнопка ручного запиту координат */}
+                    <TouchableOpacity
+                      style={[
+                        styles.requestBtn,
+                        item.location_request && styles.requestBtnPending,
+                        (item.location_request || item.status !== 'active' || localRequesting[item.courier_id]) && styles.requestBtnDisabled
+                      ]}
+                      disabled={item.location_request || item.status !== 'active' || localRequesting[item.courier_id]}
+                      onPress={() => handleForceRequestLocation(item.courier_id)}
+                    >
+                      <Text style={styles.requestBtnText}>
+                        {localRequesting[item.courier_id]
+                          ? '📡 Запит надсилається...'
+                          : item.location_request
+                          ? '🛰️ Очікування нових координат...'
+                          : item.status !== 'active'
+                          ? '⏳ Кур\'єр не на зміні'
+                          : '📡 Запросити оновлення координат'}
+                      </Text>
+                    </TouchableOpacity>
 
                     {/* Маршрут кур'єра та відстані до точок */}
                     {isRouteVisible && (
@@ -609,5 +654,26 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     fontSize: 15,
     fontWeight: '600',
+  },
+  requestBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  requestBtnPending: {
+    backgroundColor: '#b45309',
+  },
+  requestBtnDisabled: {
+    opacity: 0.5,
+  },
+  requestBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

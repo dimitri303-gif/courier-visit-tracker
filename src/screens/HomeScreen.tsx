@@ -37,6 +37,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [queueCount, setQueueCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState('Перевірка GPS...');
+  const [sendingLocation, setSendingLocation] = useState(false);
 
   // Ефект для завантаження зміни та кількості елементів у черзі
   useEffect(() => {
@@ -231,6 +232,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     Alert.alert('Синхронізація', 'Процес синхронізації завершено.');
   };
 
+  const handleForceHeartbeat = async () => {
+    setSendingLocation(true);
+    try {
+      const { VisitDetector } = require('../services/detector');
+      await VisitDetector.forceLocationHeartbeat();
+      const queue = await StorageService.getOfflineQueue();
+      setQueueCount(queue.length);
+      Alert.alert('Успішно', 'Ваші поточні координати записано для відправки.');
+    } catch (e: any) {
+      Alert.alert('Помилка', 'Не вдалося оновити координати: ' + e.message);
+    } finally {
+      setSendingLocation(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -250,9 +266,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <Text style={styles.timerText}>{shiftTime}</Text>
 
           {activeShift ? (
-            <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleEndShift}>
-              <Text style={styles.btnText}>Завершити зміну</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleEndShift}>
+                <Text style={styles.btnText}>Завершити зміну</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.btn, styles.btnSuccess, { marginTop: 12 }, sendingLocation && styles.btnDisabled]} 
+                onPress={handleForceHeartbeat}
+                disabled={sendingLocation}
+              >
+                <Text style={styles.btnText}>
+                  {sendingLocation ? 'Надсилання...' : '🛰️ Надіслати розташування'}
+                </Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <TouchableOpacity style={styles.btn} onPress={handleStartShift}>
               <Text style={styles.btnText}>Почати зміну</Text>
@@ -379,6 +406,9 @@ const styles = StyleSheet.create({
   },
   btnDanger: {
     backgroundColor: '#ef4444',
+  },
+  btnSuccess: {
+    backgroundColor: '#10b981',
   },
   btnSecondary: {
     backgroundColor: '#334155',

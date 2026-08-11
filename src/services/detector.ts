@@ -35,12 +35,56 @@ export const VisitDetector = {
    */
   async initialize(): Promise<void> {
     try {
-      const saved = await StorageService.getConfig();
-      // Ми можемо зберігати стани автомата в AsyncStorage під окремим ключем
-      // Але для спрощення використовуємо внутрішнє збереження
       detectorStates = {};
+      
+      // Реєструємо інтерцептор для обробки запитів координат від логіста
+      const { ApiService } = require('./api');
+      ApiService.setResponseInterceptor((data: any) => {
+        if (data && data.location_request === true) {
+          console.log('[Detector] Отримано запит на оновлення координат від логіста!');
+          VisitDetector.forceLocationHeartbeat().catch(err => console.warn(err));
+        }
+      });
     } catch (e) {
       console.error('Помилка ініціалізації VisitDetector:', e);
+    }
+  },
+
+  /**
+   * Примусово зчитує координати та надсилає позачерговий heartbeat на сервер
+   */
+  async forceLocationHeartbeat(): Promise<void> {
+    try {
+      const activeShift = await StorageService.getActiveShift();
+      if (!activeShift) return; // Працює тільки якщо кур'єр на зміні
+
+      // Динамічний імпорт для уникнення циклічних залежностей
+      const { LocationService } = require('./location');
+      const coords = await LocationService.getCurrentLocation();
+      if (!coords) return;
+
+      let battery: number | null = null;
+      try {
+        const level = await Battery.getBatteryLevelAsync();
+        battery = Math.round(level * 100);
+      } catch (err) {
+        console.warn('Не вдалося отримати заряд батареї для форсованого heartbeat:', err);
+      }
+
+      const nowMs = Date.now();
+      await StorageService.setLastHeartbeatTime(String(nowMs));
+
+      await SyncService.queueLog('heartbeat', 'Manual requested location heartbeat', JSON.stringify({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy_m: Math.round(coords.accuracy || 10),
+        battery: battery
+      }));
+
+      // Запускаємо примусову синхронізацію
+      SyncService.triggerSync().catch(err => console.warn('Force heartbeat sync warning:', err));
+    } catch (e) {
+      console.error('Помилка примусового надсилання координат:', e);
     }
   },
 
@@ -73,8 +117,11 @@ export const VisitDetector = {
       const lastHeartbeat = lastHeartbeatStr ? parseInt(lastHeartbeatStr, 10) : 0;
       const nowMs = Date.now();
       
-      // Раз на 10 хвилин (600,000 мілісекунд)
-      if (nowMs - lastHeartbeat >= 10 * 60 * 1000) {
+      // Частота оновлень з конфігурації (дефолт: 10 хвилин)
+      const heartbeatMins = config ? parseFloat(config.heartbeat_interval_minutes || 10) : 10;
+      const heartbeatIntervalMs = heartbeatMins * 60 * 1000;
+      
+      if (nowMs - lastHeartbeat >= heartbeatIntervalMs) {
         await StorageService.setLastHeartbeatTime(String(nowMs));
         
         let battery: number | null = null;

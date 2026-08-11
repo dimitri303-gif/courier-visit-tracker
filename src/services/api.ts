@@ -8,7 +8,19 @@ export interface LocationResponse {
   error?: string;
 }
 
+let responseInterceptor: ((data: any) => void) | null = null;
+
+function processInterceptor(result: any) {
+  if (responseInterceptor && result) {
+    responseInterceptor(result);
+  }
+}
+
 export const ApiService = {
+  setResponseInterceptor(interceptor: (data: any) => void) {
+    responseInterceptor = interceptor;
+  },
+
   /**
    * Загальний хелпер для виконання POST-запитів до Google Apps Script.
    * Надсилає дані як text/plain з JSON-рядком, щоб уникнути CORS-проблем
@@ -30,7 +42,9 @@ export const ApiService = {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
     
-    return response.json();
+    const result = await response.json();
+    processInterceptor(result);
+    return result;
   },
 
   async login(courierId: string, pin: string): Promise<any> {
@@ -48,7 +62,9 @@ export const ApiService = {
     if (!response.ok) {
       throw new Error(`API Error: ${response.status}`);
     }
-    return response.json();
+    const result = await response.json();
+    processInterceptor(result);
+    return result;
   },
 
   async getConfig(token: string): Promise<any> {
@@ -59,7 +75,9 @@ export const ApiService = {
     if (!response.ok) {
       throw new Error(`API Error: ${response.status}`);
     }
-    return response.json();
+    const result = await response.json();
+    processInterceptor(result);
+    return result;
   },
 
   async startShift(
@@ -121,6 +139,13 @@ export const ApiService = {
   async getLogistCouriers(token: string): Promise<any> {
     return this.post('logist/couriers', {
       token,
+    });
+  },
+
+  async requestCourierLocation(token: string, targetCourierId: string): Promise<any> {
+    return this.post('logist/request-location', {
+      token,
+      courier_id: targetCourierId,
     });
   }
 };

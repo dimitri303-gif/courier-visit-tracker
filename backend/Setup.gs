@@ -45,7 +45,7 @@ function setupDatabase() {
   ]);
   
   setupSheet(ss, "CourierStatus", [
-    "courier_id", "name", "last_seen", "latitude", "longitude", "accuracy_m", "battery_percent", "status", "map_link"
+    "courier_id", "name", "last_seen", "latitude", "longitude", "accuracy_m", "battery_percent", "status", "map_link", "location_request"
   ]);
   
   // 2. Заповнення налаштувань за замовчуванням (якщо порожньо)
@@ -105,7 +105,8 @@ function setupDefaultSettings(ss) {
       ["accuracy_ignore_m", "150"],
       ["manual_checkin_enabled", "true"],
       ["points_version", "1"],
-      ["max_stay_minutes", "240"]
+      ["max_stay_minutes", "240"],
+      ["heartbeat_interval_minutes", "10"]
     ];
     
     sheet.getRange(2, 1, defaults.length, 2).setValues(defaults);
@@ -331,6 +332,42 @@ function setupSampleLogists(ss) {
     sheet.getRange(2, 1, logists.length, 9).setValues(logists);
     Logger.log("Додано тестового логіста (Ігор: LO001/1234).");
   }
+}
+
+/**
+ * Додає логіста Настю Компанієць для Івано-Франківська
+ */
+function addNastiaLogist() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Logists");
+  if (!sheet) {
+    Browser.msgBox("Помилка: Аркуш 'Logists' не знайдено!");
+    return;
+  }
+  
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === "LO002" || String(data[i][2]).replace(/[^0-9]/g, "").indexOf("0689471441") !== -1) {
+      Browser.msgBox("Логіст Настя вже є у базі під ID: " + data[i][0]);
+      return;
+    }
+  }
+  
+  // Додаємо новий рядок
+  // PIN за замовчуванням: 1234 -> hash: 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+  sheet.appendRow([
+    "LO002",
+    "Компанієць Настя Логіст",
+    "0689471441",
+    "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+    "",
+    "true",
+    "",
+    "Логіст ІФ",
+    "Івано-Франківськ"
+  ]);
+  
+  Browser.msgBox("Логіста Настю успішно додано!\n\nДані для входу у додаток:\nID: LO002\nPIN: 1234\nРегіон: Івано-Франківськ");
 }
 
 

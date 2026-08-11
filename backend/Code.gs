@@ -38,6 +38,13 @@ function hashPin(pin) {
 function doGet(e) {
   var action = e.parameter.action;
   
+  // Автоматично оновлюємо структуру БД та логістів за потреби
+  try {
+    checkAndAutoSetup();
+  } catch(err) {
+    Logger.log("Auto-setup check error: " + err.toString());
+  }
+  
   // Якщо дія не задана, віддаємо веб-інтерфейс для iOS fallback
   if (!action) {
     try {
@@ -50,6 +57,19 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     } catch(err) {
       return ContentService.createTextOutput("Помилка завантаження веб-інтерфейсу: " + err.toString());
+    }
+  }
+  
+  if (action === "dashboard") {
+    try {
+      var template = HtmlService.createTemplateFromFile("Dashboard");
+      template.webAppUrl = ScriptApp.getService().getUrl();
+      return template.evaluate()
+        .setTitle("Courier Tracker Analytics Dashboard")
+        .addMetaTag("viewport", "width=device-width, initial-scale=1")
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    } catch(err) {
+      return ContentService.createTextOutput("Помилка завантаження дашборду: " + err.toString());
     }
   }
   
@@ -69,37 +89,54 @@ function doGet(e) {
     return jsonResponse({ ok: false, error: "Unauthorized token" });
   }
   
+  var responseObj;
+  
   if (action === "config") {
     var config = getSettings();
-    return jsonResponse({
+    responseObj = jsonResponse({
       ok: true,
       config: config,
       points_version: parseInt(config.points_version || 1)
     });
   }
   
-  if (action === "points") {
+  else if (action === "points") {
     var clientVersion = parseInt(e.parameter.version || 0);
     var config = getSettings();
     var serverVersion = parseInt(config.points_version || 1);
     
     if (clientVersion === serverVersion) {
-      return jsonResponse({
+      responseObj = jsonResponse({
         ok: true,
         status: "not_modified",
         points_version: serverVersion
       });
+    } else {
+      var points = getActiveLocations(courier.region);
+      responseObj = jsonResponse({
+        ok: true,
+        points_version: serverVersion,
+        points: points
+      });
     }
-    
-    var points = getActiveLocations(courier.region);
-    return jsonResponse({
-      ok: true,
-      points_version: serverVersion,
-      points: points
-    });
   }
   
-  return jsonResponse({ ok: false, error: "Invalid action" });
+  else {
+    responseObj = jsonResponse({ ok: false, error: "Invalid action" });
+  }
+  
+  // Додаємо location_request у відповідь, якщо є активний запит координат для кур'єра
+  if (courier && courier.role === "courier" && responseObj) {
+    if (hasPendingLocationRequest(courier.courier_id)) {
+      try {
+        var content = JSON.parse(responseObj.getContent());
+        content.location_request = true;
+        responseObj = jsonResponse(content);
+      } catch (e) {}
+    }
+  }
+  
+  return responseObj;
 }
 
 /**
@@ -108,6 +145,13 @@ function doGet(e) {
 function doPost(e) {
   var action = e.parameter.action;
   var payload;
+  
+  // Автоматично оновлюємо структуру БД та логістів за потреби
+  try {
+    checkAndAutoSetup();
+  } catch(err) {
+    Logger.log("Auto-setup check error: " + err.toString());
+  }
   
   try {
     // Мобільні пристрої та веб-сторінка будуть відправляти JSON у тілі запиту
@@ -136,6 +180,8 @@ function doPost(e) {
     return jsonResponse({ ok: false, error: "Unauthorized token" });
   }
   
+  var responseObj;
+  
   // Блокуємо одночасні записи в таблицю через LockService
   var lock = LockService.getScriptLock();
   try {
@@ -143,31 +189,43 @@ function doPost(e) {
     lock.waitLock(10000);
     
     if (action === "shift/start") {
-      return handleShiftStart(payload, courier);
-    }
-    
-    if (action === "shift/end") {
-      return handleShiftEnd(payload, courier);
-    }
-        
-    if (action === "events/batch") {
-      return handleEventsBatch(payload, courier);
-    }
-    
-    if (action === "logist/couriers") {
+      responseObj = handleShiftStart(payload, courier);
+    } else if (action === "shift/end") {
+      responseObj = handleShiftEnd(payload, courier);
+    } else if (action === "events/batch") {
+      responseObj = handleEventsBatch(payload, courier);
+    } else if (action === "logist/couriers") {
       if (courier.role !== "logist") {
         return jsonResponse({ ok: false, error: "Access denied: not a logist" });
       }
-      return handleGetLogistCouriers(payload, courier);
+      responseObj = handleGetLogistCouriers(payload, courier);
+    } else if (action === "logist/request-location") {
+      if (courier.role !== "logist") {
+        return jsonResponse({ ok: false, error: "Access denied: not a logist" });
+      }
+      responseObj = handleRequestLocation(payload);
+    } else {
+      responseObj = jsonResponse({ ok: false, error: "Invalid POST action" });
+    }
+    
+    // Додаємо location_request у відповідь для кур'єра, якщо є активний запит від логіста
+    if (courier && courier.role === "courier" && responseObj) {
+      if (hasPendingLocationRequest(courier.courier_id)) {
+        try {
+          var content = JSON.parse(responseObj.getContent());
+          content.location_request = true;
+          responseObj = jsonResponse(content);
+        } catch (e) {}
+      }
     }
     
   } catch (err) {
-    return jsonResponse({ ok: false, error: "Database lock timeout: " + err.toString() });
+    responseObj = jsonResponse({ ok: false, error: "Database lock timeout: " + err.toString() });
   } finally {
     lock.releaseLock();
   }
   
-  return jsonResponse({ ok: false, error: "Invalid POST action" });
+  return responseObj;
 }
 
 // ==========================================
@@ -610,7 +668,8 @@ function handleGetLogistCouriers(data, logist) {
         longitude: statusRows[i][4] ? parseFloat(statusRows[i][4]) : null,
         accuracy_m: statusRows[i][5] ? parseFloat(statusRows[i][5]) : null,
         battery_percent: statusRows[i][6] ? parseFloat(statusRows[i][6]) : null,
-        status: String(statusRows[i][7])
+        status: String(statusRows[i][7]),
+        location_request: String(statusRows[i][9] || "").toLowerCase() === "true"
       };
     }
   }
@@ -647,7 +706,8 @@ function handleGetLogistCouriers(data, logist) {
       longitude: null,
       accuracy_m: null,
       battery_percent: null,
-      status: "ended"
+      status: "ended",
+      location_request: false
     };
     
     result.push({
@@ -660,6 +720,7 @@ function handleGetLogistCouriers(data, logist) {
       accuracy_m: s.accuracy_m,
       battery_percent: s.battery_percent,
       last_seen: s.last_seen,
+      location_request: s.location_request,
       visited_locations: visitedMap[cId] || []
     });
   }
@@ -759,6 +820,11 @@ function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, statu
     if (battery !== undefined && battery !== null) sheet.getRange(courierRowIndex, 7).setValue(battery);
     if (status) sheet.getRange(courierRowIndex, 8).setValue(status);
     
+    // Якщо отримано свіжі координати, знімаємо прапорець запиту
+    if (lat && lng) {
+      sheet.getRange(courierRowIndex, 10).setValue("false");
+    }
+    
     sheet.getRange(courierRowIndex, 3).setValue(lastSeen).setNumberFormat("dd.MM.yyyy HH:mm:ss");
   } else {
     // Додаємо новий рядок
@@ -774,8 +840,194 @@ function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, statu
       accuracy || "",
       battery !== undefined && battery !== null ? battery : "",
       status || "",
-      mapLinkFormula
+      mapLinkFormula,
+      "false" // location_request
     ]);
     sheet.getRange(rowNum, 3).setNumberFormat("dd.MM.yyyy HH:mm:ss");
   }
+}
+
+/**
+ * Серверна функція для отримання всіх даних для дашборду.
+ * Викликається з клієнтського JS через google.script.run
+ */
+function getDashboardData() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      throw new Error("Не вдалося отримати доступ до активної таблиці.");
+    }
+    
+    var couriersSheet = ss.getSheetByName("Couriers");
+    var locationsSheet = ss.getSheetByName("Locations");
+    var shiftsSheet = ss.getSheetByName("Shifts");
+    var visitsSheet = ss.getSheetByName("Visits");
+    var statusSheet = ss.getSheetByName("CourierStatus");
+    
+    var couriers = couriersSheet ? getSheetDataAsJson(couriersSheet) : [];
+    var locations = locationsSheet ? getSheetDataAsJson(locationsSheet) : [];
+    var shifts = shiftsSheet ? getSheetDataAsJson(shiftsSheet) : [];
+    var visits = visitsSheet ? getSheetDataAsJson(visitsSheet) : [];
+    var courierStatus = statusSheet ? getSheetDataAsJson(statusSheet) : [];
+    
+    // Оновлюємо тривалість змін у реальному часі, якщо зміна активна
+    var now = new Date();
+    for (var i = 0; i < shifts.length; i++) {
+      if (shifts[i].status === "active" && shifts[i].start_time) {
+        var start = new Date(shifts[i].start_time);
+        if (!isNaN(start.getTime())) {
+          shifts[i].duration_minutes = Math.round((now - start) / 60000);
+        }
+      }
+    }
+    
+    return {
+      success: true,
+      data: {
+        couriers: couriers,
+        locations: locations,
+        shifts: shifts,
+        visits: visits,
+        courierStatus: courierStatus
+      }
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err.toString()
+    };
+  }
+}
+
+/**
+ * Допоміжна функція для зчитування даних аркуша як масиву об'єктів (JSON).
+ */
+function getSheetDataAsJson(sheet) {
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  
+  var headers = data[0];
+  var jsonArray = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var obj = {};
+    var hasData = false;
+    for (var j = 0; j < headers.length; j++) {
+      var val = row[j];
+      // Конвертуємо об'єкти дат в ISO рядки, щоб вони передавалися клієнту
+      if (val instanceof Date) {
+        if (val && !isNaN(val.getTime())) {
+          val = val.toISOString();
+        } else {
+          val = "";
+        }
+      }
+      obj[headers[j]] = val;
+      if (val !== undefined && val !== null && val !== "") {
+        hasData = true;
+      }
+    }
+    if (hasData) {
+      jsonArray.push(obj);
+    }
+  }
+  return jsonArray;
+}
+
+/**
+ * Перевіряє наявність активного запиту координат від логіста для конкретного кур'єра.
+ */
+function hasPendingLocationRequest(courierId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("CourierStatus");
+  if (!sheet) return false;
+  
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === courierId) {
+      return String(rows[i][9] || "").toLowerCase() === "true"; // Column J (Index 9)
+    }
+  }
+  return false;
+}
+
+/**
+ * Обробляє запит логіста на позачергове зчитування координат кур'єра.
+ */
+function handleRequestLocation(data) {
+  var targetCourierId = data.courier_id;
+  if (!targetCourierId) {
+    return jsonResponse({ ok: false, error: "courier_id is required" });
+  }
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("CourierStatus");
+  if (!sheet) {
+    return jsonResponse({ ok: false, error: "CourierStatus sheet not found" });
+  }
+  
+  var rows = sheet.getDataRange().getValues();
+  var courierRowIndex = -1;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === targetCourierId) {
+      courierRowIndex = i + 1;
+      break;
+    }
+  }
+  
+  if (courierRowIndex !== -1) {
+    sheet.getRange(courierRowIndex, 10).setValue("true"); // Set location_request to true in Column J (10th column)
+    return jsonResponse({ ok: true, message: "Location request set for courier " + targetCourierId });
+  } else {
+    return jsonResponse({ ok: false, error: "Courier status row not found" });
+  }
+}
+
+/**
+ * Автоматично перевіряє та оновлює структуру бази даних, якщо вона застаріла,
+ * а також додає необхідних логістів за потреби.
+ */
+function checkAndAutoSetup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) return;
+  
+  // 1. Перевірка CourierStatus на наявність 10-ї колонки (location_request)
+  var statusSheet = ss.getSheetByName("CourierStatus");
+  if (statusSheet && statusSheet.getLastColumn() < 10) {
+    setupDatabase();
+  }
+  
+  // 2. Перевірка наявності логіста Насті
+  var logistsSheet = ss.getSheetByName("Logists");
+  if (logistsSheet) {
+    var hasNastia = false;
+    var data = logistsSheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === "LO002") {
+        hasNastia = true;
+        break;
+      }
+    }
+    if (!hasNastia) {
+      addNastiaLogistSilent(logistsSheet);
+    }
+  }
+}
+
+/**
+ * Додає логіста Настю без виводу діалогових вікон (для фонової API-сумісності)
+ */
+function addNastiaLogistSilent(sheet) {
+  sheet.appendRow([
+    "LO002",
+    "Компанієць Настя Логіст",
+    "0689471441",
+    "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+    "",
+    "true",
+    "",
+    "Логіст ІФ",
+    "Івано-Франківськ"
+  ]);
+  Logger.log("Логіста Настю автоматично додано через фонову перевірку.");
 }
