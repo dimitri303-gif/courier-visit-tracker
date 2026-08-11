@@ -1,9 +1,10 @@
 import { StorageService, SyncEvent } from './storage';
 import { ApiService } from './api';
 
-let isSyncing = false;
+let syncInProgress = false;
 let retryTimer: NodeJS.Timeout | null = null;
 let currentBackoffSeconds = 5; // Початкова затримка повтору - 5 сек
+let cachedSyncConfig: any = null;
 
 // Простий генератор UUID для локальних подій
 export function generateUUID(): string {
@@ -19,7 +20,18 @@ export const SyncService = {
    * Запис події візиту в чергу
    */
   async queueVisit(payload: any): Promise<void> {
+    const config = await StorageService.getConfig();
+    const queueLimit = config ? parseInt(config.sync_queue_max_size || '5000', 10) : 5000;
     const queue = await StorageService.getOfflineQueue();
+    
+    // Ліміт черги: видаляємо найстаріший лог-запис якщо черга переповнена
+    if (queue.length >= queueLimit) {
+      const firstLogIndex = queue.findIndex(e => e.event_type === 'log');
+      if (firstLogIndex !== -1) {
+        queue.splice(firstLogIndex, 1);
+      }
+    }
+
     const event: SyncEvent = {
       event_uuid: generateUUID(),
       event_type: 'visit',
@@ -37,13 +49,16 @@ export const SyncService = {
    * Запис логу/діагностики в чергу
    */
   async queueLog(logType: string, message: string, details: any = null): Promise<void> {
+    const config = await StorageService.getConfig();
+    const queueLimit = config ? parseInt(config.sync_queue_max_size || '5000', 10) : 5000;
     const queue = await StorageService.getOfflineQueue();
     
-    // Для запобігання надмірному зростанню логів обмежимо їх розмір
-    if (queue.filter(e => e.event_type === 'log').length > 500) {
-      // Видаляємо найстаріший лог
+    // Ліміт черги: видаляємо найстаріший лог-запис якщо черга переповнена
+    if (queue.length >= queueLimit) {
       const firstLogIndex = queue.findIndex(e => e.event_type === 'log');
-      if (firstLogIndex !== -1) queue.splice(firstLogIndex, 1);
+      if (firstLogIndex !== -1) {
+        queue.splice(firstLogIndex, 1);
+      }
     }
     
     const event: SyncEvent = {
@@ -66,23 +81,24 @@ export const SyncService = {
    * Головний метод синхронізації черги з сервером
    */
   async triggerSync(): Promise<void> {
-    if (isSyncing) return;
+    if (syncInProgress) return;
+    syncInProgress = true;
     
-    const token = await StorageService.getToken();
-    const courierId = await StorageService.getCourierId();
-    if (!token || !courierId) return;
-
-    const queue = await StorageService.getOfflineQueue();
-    if (queue.length === 0) return;
-
-    isSyncing = true;
-    const activeShift = await StorageService.getActiveShift();
-    const shiftId = activeShift ? activeShift.shift_id : null;
-    
-    // Копіюємо батч для синхронізації
-    const batch = [...queue];
-
     try {
+      cachedSyncConfig = await StorageService.getConfig();
+      const token = await StorageService.getToken();
+      const courierId = await StorageService.getCourierId();
+      if (!token || !courierId) return;
+
+      const queue = await StorageService.getOfflineQueue();
+      if (queue.length === 0) return;
+
+      const activeShift = await StorageService.getActiveShift();
+      const shiftId = activeShift ? activeShift.shift_id : null;
+      
+      // Копіюємо батч для синхронізації
+      const batch = [...queue];
+
       const result = await ApiService.syncBatch(token, courierId, shiftId, batch);
       
       if (result.ok) {
@@ -93,20 +109,22 @@ export const SyncService = {
         );
         
         await StorageService.setOfflineQueue(updatedQueue);
-        isSyncing = false;
-        currentBackoffSeconds = 5; // Скидаємо бекофф при успіху
+        const initialBackoff = cachedSyncConfig ? parseInt(cachedSyncConfig.sync_backoff_initial_s || '5', 10) : 5;
+        currentBackoffSeconds = initialBackoff; // Скидаємо бекофф при успіху
         
         // Якщо в черзі з'явилися нові елементи під час синхронізації — запустимо ще раз
         if (updatedQueue.length > 0) {
-          this.triggerSync();
+          // Ми викликаємо це після try/finally через setTimeout щоб уникнути рекурсії або просто нехай виконається пізніше
+          setTimeout(() => this.triggerSync(), 0);
         }
       } else {
         throw new Error(result.error || 'Server rejected batch');
       }
     } catch (error) {
       console.warn('Помилка синхронізації, плануємо повтор:', error);
-      isSyncing = false;
       this.scheduleRetry();
+    } finally {
+      syncInProgress = false;
     }
   },
 
@@ -118,8 +136,9 @@ export const SyncService = {
 
     retryTimer = setTimeout(() => {
       retryTimer = null;
-      // Збільшуємо затримку (макс. 5 хвилин)
-      currentBackoffSeconds = Math.min(currentBackoffSeconds * 2, 300);
+      const maxBackoff = cachedSyncConfig ? parseInt(cachedSyncConfig.sync_backoff_max_s || '300', 10) : 300;
+      // Збільшуємо затримку (макс. згідно конфігу)
+      currentBackoffSeconds = Math.min(currentBackoffSeconds * 2, maxBackoff);
       this.triggerSync();
     }, currentBackoffSeconds * 1000);
   }

@@ -35,6 +35,13 @@ export const ManualCheckinScreen: React.FC<ManualCheckinScreenProps> = ({ onNavi
 
   useEffect(() => {
     const fetchLocationAndPoints = async () => {
+      const config = await StorageService.getConfig();
+      if (config && config.manual_checkin_enabled === 'false') {
+        Alert.alert('Ручний чекін вимкнено адміністратором');
+        onNavigateBack();
+        return;
+      }
+
       // 1. Спочатку завантажуємо та відображаємо точки з локального сховища миттєво
       let cachedPoints: NearbyLocation[] = [];
       try {
@@ -51,9 +58,10 @@ export const ManualCheckinScreen: React.FC<ManualCheckinScreenProps> = ({ onNavi
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          // Створюємо проміс тайм-ауту на 6 секунд
+          // Створюємо проміс тайм-ауту на 6 секунд (або з конфігу)
+          const gpsTimeout = config ? parseInt(config.gps_single_timeout_ms || '5000', 10) : 5000;
           const timeoutPromise = new Promise<null>((_, reject) =>
-            setTimeout(() => reject(new Error('GPS timeout')), 6000)
+            setTimeout(() => reject(new Error('GPS timeout')), gpsTimeout)
           );
 
           // Створюємо запит координат
@@ -72,15 +80,18 @@ export const ManualCheckinScreen: React.FC<ManualCheckinScreenProps> = ({ onNavi
 
             // Якщо координати отримано, перераховуємо відстані та сортуємо точки
             if (cachedPoints.length > 0) {
-              const nearbyPoints = cachedPoints.map((locItem) => ({
-                ...locItem,
-                distance: calculateDistance(
-                  coords!.latitude,
-                  coords!.longitude,
-                  locItem.latitude,
-                  locItem.longitude
-                ),
-              }));
+              const maxCheckinDistance = config ? parseInt(config.manual_checkin_max_distance_m || '200', 10) : 200;
+              const nearbyPoints = cachedPoints
+                .map((locItem) => ({
+                  ...locItem,
+                  distance: calculateDistance(
+                    coords!.latitude,
+                    coords!.longitude,
+                    locItem.latitude,
+                    locItem.longitude
+                  ),
+                }))
+                .filter(locItem => (locItem.distance || 0) <= maxCheckinDistance);
 
               nearbyPoints.sort((a, b) => (a.distance || 0) - (b.distance || 0));
               setLocations(nearbyPoints);

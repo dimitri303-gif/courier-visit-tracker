@@ -1,13 +1,14 @@
 import { Location, StorageService } from './storage';
 import { SyncService } from './sync';
 import * as Battery from 'expo-battery';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface LocationState {
   location_id: string;
   state: 'outside' | 'candidate' | 'inside_confirmed' | 'exited';
   first_enter_time: string | null; // ISO string
   confirmed_enter_time: string | null; // ISO string
-  consecutive_outside: number;
+  recentReadings: ('in' | 'out')[];
 }
 
 // Обчислення відстані за формулою гаверсину в метрах
@@ -28,6 +29,8 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 
 // Локальний стан детектора в пам'яті
 let detectorStates: { [key: string]: LocationState } = {};
+let cachedLocations: Location[] | null = null;
+let cachedPointsVersion: number | null = null;
 
 export const VisitDetector = {
   /**
@@ -35,7 +38,13 @@ export const VisitDetector = {
    */
   async initialize(): Promise<void> {
     try {
-      detectorStates = {};
+      const storedStatesStr = await AsyncStorage.getItem('@detector_states');
+      if (storedStatesStr) {
+        detectorStates = JSON.parse(storedStatesStr);
+      } else {
+        detectorStates = {};
+      }
+
       
       // Реєструємо інтерцептор для автоматичної синхронізації налаштувань та запитів координат
       const { ApiService } = require('./api');
@@ -48,6 +57,8 @@ export const VisitDetector = {
           if (data.config) {
             console.log('[Detector] Автоматично оновлено конфігурацію з сервера.');
             StorageService.setConfig(data.config).catch(err => console.warn(err));
+            const { LocationService } = require('./location');
+            LocationService.restartTrackingIfConfigChanged().catch((err: any) => console.warn(err));
           }
           if (data.points_version) {
             StorageService.setPointsVersion(data.points_version).catch(err => console.warn(err));
@@ -56,6 +67,17 @@ export const VisitDetector = {
       });
     } catch (e) {
       console.error('Помилка ініціалізації VisitDetector:', e);
+    }
+  },
+
+  /**
+   * Збереження станів
+   */
+  async persistDetectorStates(): Promise<void> {
+    try {
+      await AsyncStorage.setItem('@detector_states', JSON.stringify(detectorStates));
+    } catch (e) {
+      console.warn('Failed to save detector states', e);
     }
   },
 
@@ -106,9 +128,11 @@ export const VisitDetector = {
     accuracy: number;
   }): Promise<void> {
     const config = await StorageService.getConfig();
-    const defaultRadius = config ? parseFloat(config.default_radius_m || 30) : 30;
-    const dwellSeconds = config ? parseFloat(config.dwell_seconds || 60) : 60;
-    const accuracyIgnore = config ? parseFloat(config.accuracy_ignore_m || 150) : 150;
+    const defaultRadius = config ? parseFloat(config.default_radius_m || '30') : 30;
+    const dwellSeconds = config ? parseFloat(config.dwell_seconds || '60') : 60;
+    const accuracyIgnore = config ? parseFloat(config.accuracy_ignore_m || '150') : 150;
+    const exitWindowSize = config ? parseInt(config.exit_window_size || '5', 10) : 5;
+    const exitThreshold = config ? parseInt(config.exit_threshold || '3', 10) : 3;
     
     // Ігноруємо геодані з поганою точністю
     if (coords.accuracy > accuracyIgnore) {
@@ -116,7 +140,13 @@ export const VisitDetector = {
       return;
     }
 
-    const locations = await StorageService.getLocations();
+    const currentPointsVersion = await StorageService.getPointsVersion();
+    if (cachedLocations === null || cachedPointsVersion !== currentPointsVersion) {
+      cachedLocations = await StorageService.getLocations();
+      cachedPointsVersion = currentPointsVersion;
+    }
+    const locations = cachedLocations;
+
     const activeShift = await StorageService.getActiveShift();
     if (!activeShift) return; // Відстеження тільки під час зміни
 
@@ -127,7 +157,7 @@ export const VisitDetector = {
       const nowMs = Date.now();
       
       // Частота оновлень з конфігурації (дефолт: 10 хвилин)
-      const heartbeatMins = config ? parseFloat(config.heartbeat_interval_minutes || 10) : 10;
+      const heartbeatMins = config ? parseFloat(config.heartbeat_interval_minutes || '10') : 10;
       const heartbeatIntervalMs = heartbeatMins * 60 * 1000;
       
       if (nowMs - lastHeartbeat >= heartbeatIntervalMs) {
@@ -178,10 +208,18 @@ export const VisitDetector = {
           state: 'outside',
           first_enter_time: null,
           confirmed_enter_time: null,
-          consecutive_outside: 0,
+          recentReadings: [],
         };
         detectorStates[loc.location_id] = locState;
       }
+
+      // Додаємо читання до sliding window
+      locState.recentReadings.push(inside ? 'in' : 'out');
+      if (locState.recentReadings.length > exitWindowSize) {
+        locState.recentReadings.shift();
+      }
+
+      const outCount = locState.recentReadings.filter(r => r === 'out').length;
 
       // Кінцевий автомат (State Machine)
       switch (locState.state) {
@@ -189,7 +227,6 @@ export const VisitDetector = {
           if (inside) {
             locState.state = 'candidate';
             locState.first_enter_time = nowStr;
-            locState.consecutive_outside = 0;
             
             await SyncService.queueLog('diagnostic', `Location candidate: ${loc.name} (${loc.location_id}), distance: ${Math.round(distance)}m`);
           }
@@ -197,7 +234,6 @@ export const VisitDetector = {
 
         case 'candidate':
           if (inside) {
-            locState.consecutive_outside = 0;
             const enterTime = new Date(locState.first_enter_time!);
             const secondsDiff = (now.getTime() - enterTime.getTime()) / 1000;
 
@@ -206,8 +242,9 @@ export const VisitDetector = {
               locState.confirmed_enter_time = nowStr;
               
               await SyncService.queueLog('visit_detected', `Visit confirmed: ${loc.name} (${loc.location_id}) after ${Math.round(secondsDiff)}s`);
+              await VisitDetector.persistDetectorStates();
             }
-          } else {
+          } else if (outCount >= exitThreshold) {
             // Вихід із зони кандидата (можливо просто проїхав повз)
             locState.state = 'outside';
             locState.first_enter_time = null;
@@ -215,10 +252,41 @@ export const VisitDetector = {
           break;
 
         case 'inside_confirmed':
+          const maxStayMinutes = config ? parseFloat(config.max_stay_minutes || '240') : 240;
+          if (locState.first_enter_time) {
+            const stayDuration = (now.getTime() - new Date(locState.first_enter_time).getTime()) / 60000;
+            if (stayDuration >= maxStayMinutes) {
+              // Force exit: record visit and reset state
+              locState.state = 'outside';
+              const enterTime = new Date(locState.first_enter_time);
+              const durationSecs = Math.round((now.getTime() - enterTime.getTime()) / 1000);
+              
+              await SyncService.queueVisit({
+                location_id: loc.location_id,
+                enter_time: locState.first_enter_time,
+                exit_time: nowStr,
+                duration_seconds: durationSecs,
+                enter_lat: loc.latitude, // Для простоти використовуємо координати точки або останні GPS
+                enter_lng: loc.longitude,
+                exit_lat: coords.latitude,
+                exit_lng: coords.longitude,
+                accuracy_m: Math.round(coords.accuracy),
+                matched_distance_m: Math.round(distance),
+                source: 'auto',
+                offline_synced: false
+              });
+              await SyncService.queueLog('max_stay_exceeded', `Forced visit finalization for ${loc.name} (${loc.location_id})`);
+              
+              locState.first_enter_time = null;
+              locState.confirmed_enter_time = null;
+              await VisitDetector.persistDetectorStates();
+              break; // Skip the rest of the switch statement
+            }
+          }
+
           if (!inside) {
-            // Дозволяємо невеликий GPS джиттер: вихід фіксуємо лише після 2 послідовних вимірів ззовні
-            locState.consecutive_outside++;
-            if (locState.consecutive_outside >= 2) {
+            // Дозволяємо невеликий GPS джиттер: вихід фіксуємо лише після N з M вимірів ззовні
+            if (outCount >= exitThreshold) {
               // Фіналізуємо візит
               locState.state = 'outside';
               const enterTime = new Date(locState.first_enter_time!);
@@ -244,10 +312,8 @@ export const VisitDetector = {
               
               locState.first_enter_time = null;
               locState.confirmed_enter_time = null;
-              locState.consecutive_outside = 0;
+              await VisitDetector.persistDetectorStates();
             }
-          } else {
-            locState.consecutive_outside = 0; // Скидаємо лічильник помилкових виходів
           }
           break;
       }
@@ -263,7 +329,7 @@ export const VisitDetector = {
     
     const locations = await StorageService.getLocations();
     const config = await StorageService.getConfig();
-    const dwellSeconds = config ? parseFloat(config.dwell_seconds || 60) : 60;
+    const dwellSeconds = config ? parseFloat(config.dwell_seconds || '60') : 60;
 
     for (const loc of locations) {
       const locState = detectorStates[loc.location_id];
@@ -291,7 +357,10 @@ export const VisitDetector = {
       }
     }
     
-    // Скидаємо стан детектора
+    // Скидаємо стан детектора та очищаємо збережені стани
     detectorStates = {};
+    cachedLocations = null;
+    cachedPointsVersion = null;
+    await AsyncStorage.removeItem('@detector_states').catch(() => {});
   }
 };

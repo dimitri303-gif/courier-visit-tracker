@@ -28,6 +28,9 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   }
 });
 
+const accuracyMap = [null, Location.Accuracy.Lowest, Location.Accuracy.Low, Location.Accuracy.Balanced, Location.Accuracy.High, Location.Accuracy.BestForNavigation];
+let activeGpsConfig: { interval: number; distanceFilter: number; accuracy: Location.Accuracy } | null = null;
+
 export const LocationService = {
   /**
    * Перевіряє, чи увімкнені служби геолокації на пристрої
@@ -83,18 +86,23 @@ export const LocationService = {
     if (hasStarted) return;
 
     const config = await StorageService.getConfig();
-    const interval = config ? parseInt(config.location_interval_ms || 15000, 10) : 15000;
-    const distanceFilter = config ? parseInt(config.distance_filter_m || 10, 10) : 10;
+    const interval = config ? parseInt(config.location_interval_ms || '15000', 10) : 15000;
+    const distanceFilter = config ? parseInt(config.distance_filter_m || '10', 10) : 10;
+    
+    const accuracyLevel = Math.max(3, Math.min(5, config ? parseInt(config.gps_accuracy || '4', 10) : 4));
+    const accuracy = accuracyMap[accuracyLevel] as Location.Accuracy || Location.Accuracy.High;
+
+    activeGpsConfig = { interval, distanceFilter, accuracy };
 
     try {
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.High,
+        accuracy: accuracy,
         timeInterval: interval,
         distanceInterval: distanceFilter,
         // Обов'язково для Android, щоб система не вбивала процес
         foregroundService: {
-          notificationTitle: 'Відстеження робочої зміни',
-          notificationBody: 'Додаток фіксує ваші візити на точки доставки.',
+          notificationTitle: config?.notification_title || 'Відстеження робочої зміни',
+          notificationBody: config?.notification_body || 'Додаток фіксує ваші візити на точки доставки.',
           notificationColor: '#6366F1'
         },
         pausesUpdatesAutomatically: false
@@ -104,6 +112,32 @@ export const LocationService = {
     } catch (err: any) {
       await SyncService.queueLog('tracking_error', 'Failed to start background tracking', err.toString());
       console.error('Помилка старту фонової геолокації:', err);
+    }
+  },
+
+  /**
+   * Перезапуск відстеження, якщо конфігурація змінилася
+   */
+  async restartTrackingIfConfigChanged(): Promise<void> {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    if (!hasStarted) return;
+
+    const config = await StorageService.getConfig();
+    const interval = config ? parseInt(config.location_interval_ms || '15000', 10) : 15000;
+    const distanceFilter = config ? parseInt(config.distance_filter_m || '10', 10) : 10;
+    
+    const accuracyLevel = Math.max(3, Math.min(5, config ? parseInt(config.gps_accuracy || '4', 10) : 4));
+    const accuracy = accuracyMap[accuracyLevel] as Location.Accuracy || Location.Accuracy.High;
+
+    if (
+      !activeGpsConfig ||
+      activeGpsConfig.interval !== interval ||
+      activeGpsConfig.distanceFilter !== distanceFilter ||
+      activeGpsConfig.accuracy !== accuracy
+    ) {
+      await this.stopBackgroundTracking();
+      await this.startBackgroundTracking();
+      await SyncService.queueLog('tracking_restarted', 'GPS parameters updated from remote config');
     }
   },
 
@@ -118,9 +152,12 @@ export const LocationService = {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return null;
 
-      // Створюємо проміс тайм-ауту на 5 секунд для запобігання зависанню GPS
+      // Створюємо проміс тайм-ауту для запобігання зависанню GPS
+      const config = await StorageService.getConfig();
+      const timeoutMs = config ? parseInt(config.gps_single_timeout_ms || '5000', 10) : 5000;
+
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Location request timed out')), 5000)
+        setTimeout(() => reject(new Error('Location request timed out')), timeoutMs)
       );
 
       // Запускаємо паралельно запит геолокації та тайм-аут

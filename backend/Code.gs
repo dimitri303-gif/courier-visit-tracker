@@ -38,13 +38,6 @@ function hashPin(pin) {
 function doGet(e) {
   var action = e.parameter.action;
   
-  // Автоматично оновлюємо структуру БД та логістів за потреби
-  try {
-    checkAndAutoSetup();
-  } catch(err) {
-    Logger.log("Auto-setup check error: " + err.toString());
-  }
-  
   // Якщо дія не задана, віддаємо веб-інтерфейс для iOS fallback
   if (!action) {
     try {
@@ -147,13 +140,6 @@ function doGet(e) {
 function doPost(e) {
   var action = e.parameter.action;
   var payload;
-  
-  // Автоматично оновлюємо структуру БД та логістів за потреби
-  try {
-    checkAndAutoSetup();
-  } catch(err) {
-    Logger.log("Auto-setup check error: " + err.toString());
-  }
   
   try {
     // Мобільні пристрої та веб-сторінка будуть відправляти JSON у тілі запиту
@@ -330,21 +316,33 @@ function handleShiftStart(data, courier) {
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Shifts");
-  var rows = sheet.getDataRange().getValues();
+  
+  // Зчитуємо тільки останні 200 рядків замість всієї таблиці
+  var sheetLastRow = sheet.getLastRow();
+  var rows = [];
+  var rowOffset = 1; // зсув для перерахунку індексу рядка в таблиці
+  if (sheetLastRow > 1) {
+    var startRow = Math.max(2, sheetLastRow - 200);
+    rowOffset = startRow;
+    var numRows = sheetLastRow - startRow + 1;
+    rows = sheet.getRange(startRow, 1, numRows, 10).getValues();
+  }
   
   // Перевірка на дуплікат
-  for (var i = 1; i < rows.length; i++) {
+  for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][0]) === shiftId) {
       return jsonResponse({ ok: true, shift_id: shiftId, note: "Shift already registered (idempotent)" });
     }
   }
   
-  // Закриваємо попередні незавершені зміни для цього кур'єра
-  for (var i = 1; i < rows.length; i++) {
+  // Закриваємо попередні незавершені зміни для цього кур'єра (атомарне оновлення)
+  for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) === courierId && String(rows[i][8]) === "active") {
-      sheet.getRange(i + 1, 4).setValue(parseDate(startTime)); // end_time
-      sheet.getRange(i + 1, 9).setValue("auto-closed"); // status
-      sheet.getRange(i + 1, 10).setValue("Автоматично закрито при запуску нової зміни.");
+      var rowIdx = rowOffset + i;
+      sheet.getRange(rowIdx, 4, 1, 7).setValues([[
+        parseDate(startTime), "", rows[i][5], rows[i][6], rows[i][7],
+        "auto-closed", "Автоматично закрито при запуску нової зміни."
+      ]]);
     }
   }
   
@@ -392,9 +390,19 @@ function handleShiftEnd(data, courier) {
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Shifts");
-  var rows = sheet.getDataRange().getValues();
   
-  for (var i = 1; i < rows.length; i++) {
+  // Зчитуємо тільки останні 200 рядків замість всієї таблиці
+  var sheetLastRow = sheet.getLastRow();
+  var rows = [];
+  var rowOffset = 1;
+  if (sheetLastRow > 1) {
+    var startRow = Math.max(2, sheetLastRow - 200);
+    rowOffset = startRow;
+    var numRows = sheetLastRow - startRow + 1;
+    rows = sheet.getRange(startRow, 1, numRows, 10).getValues();
+  }
+  
+  for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][0]) === shiftId) {
       var startTimeStr = rows[i][2];
       var durationMin = "";
@@ -405,9 +413,13 @@ function handleShiftEnd(data, courier) {
         durationMin = Math.round((end - start) / 60000);
       }
       
-      sheet.getRange(i + 1, 4).setValue(parseDate(endTime)).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // end_time
-      sheet.getRange(i + 1, 5).setValue(durationMin); // duration_minutes
-      sheet.getRange(i + 1, 9).setValue("ended"); // status
+      // Атомарне оновлення рядка однією операцією
+      var rowIdx = rowOffset + i;
+      sheet.getRange(rowIdx, 4, 1, 7).setValues([[
+        parseDate(endTime), durationMin, rows[i][5], rows[i][6], rows[i][7],
+        "ended", rows[i][9] || ""
+      ]]);
+      sheet.getRange(rowIdx, 4).setNumberFormat("dd.MM.yyyy HH:mm:ss");
       
       return jsonResponse({ ok: true, shift_id: shiftId });
     }
@@ -433,17 +445,30 @@ function handleEventsBatch(data, courier) {
   var visitsSheet = ss.getSheetByName("Visits");
   var logsSheet = ss.getSheetByName("EventLog");
   
-  var visitRows = visitsSheet.getDataRange().getValues();
-  var logRows = logsSheet.getDataRange().getValues();
+  var visitRows = [];
+  var lastVisitRow = visitsSheet.getLastRow();
+  if (lastVisitRow > 1) {
+    var startVisitRow = Math.max(2, lastVisitRow - 1000);
+    var numVisitRows = lastVisitRow - startVisitRow + 1;
+    visitRows = visitsSheet.getRange(startVisitRow, 1, numVisitRows, 18).getValues();
+  }
+
+  var logRows = [];
+  var lastLogRow = logsSheet.getLastRow();
+  if (lastLogRow > 1) {
+    var startLogRow = Math.max(2, lastLogRow - 2000);
+    var numLogRows = lastLogRow - startLogRow + 1;
+    logRows = logsSheet.getRange(startLogRow, 1, numLogRows, 8).getValues();
+  }
   
   // Створюємо хелпери швидкого пошуку дублікатів по UUID
   var existingVisitUuids = {};
-  for (var i = 1; i < visitRows.length; i++) {
+  for (var i = 0; i < visitRows.length; i++) {
     existingVisitUuids[String(visitRows[i][1])] = true; // event_uuid
   }
   
   var existingLogUuids = {};
-  for (var i = 1; i < logRows.length; i++) {
+  for (var i = 0; i < logRows.length; i++) {
     existingLogUuids[String(logRows[i][1])] = true; // event_uuid
   }
   
@@ -452,103 +477,124 @@ function handleEventsBatch(data, courier) {
   var failed = [];
   var nowStr = new Date().toISOString();
   
+  // Збираємо нові рядки для батч-запису замість окремих appendRow()
+  var newVisitRows = [];
+  var newLogRows = [];
+  var lastHeartbeatPayload = null; // Зберігаємо останній heartbeat для оновлення статусу
+  var lastVisitPayload = null;     // Зберігаємо останній візит для оновлення статусу
+  
   for (var k = 0; k < batch.length; k++) {
-    var event = batch[k];
-    var uuid = event.event_uuid;
-    var type = event.event_type;
-    var timestamp = event.timestamp;
-    var payload = event.payload || {};
-    
-    if (!uuid) {
-      failed.push({ index: k, error: "Missing event_uuid" });
-      continue;
-    }
-    
-    if (type === "visit" || type === "manual_checkin") {
-      if (existingVisitUuids[uuid]) {
-        duplicates++;
-        accepted++;
+    try {
+      var event = batch[k];
+      var uuid = event.event_uuid;
+      var type = event.event_type;
+      var timestamp = event.timestamp;
+      var payload = event.payload || {};
+      
+      if (!uuid) {
+        failed.push({ index: k, error: "Missing event_uuid" });
         continue;
       }
       
-      // Записуємо візит
-      // Колонки: visit_id, event_uuid, courier_id, shift_id, location_id, enter_time, exit_time, duration_seconds, 
-      // enter_lat, enter_lng, exit_lat, exit_lng, accuracy_m, matched_distance_m, source, offline_synced, created_at, raw_payload
-      visitsSheet.appendRow([
-        Utilities.getUuid(),
-        uuid,
-        courierId,
-        shiftId || "",
-        payload.location_id || "",
-        parseDate(payload.enter_time || timestamp),
-        parseDate(payload.exit_time || timestamp),
-        payload.duration_seconds || 0,
-        payload.enter_lat || "",
-        payload.enter_lng || "",
-        payload.exit_lat || "",
-        payload.exit_lng || "",
-        payload.accuracy_m || "",
-        payload.matched_distance_m || "",
-        payload.source || (type === "manual_checkin" ? "manual" : "auto"),
-        payload.offline_synced !== undefined ? payload.offline_synced : true,
-        parseDate(nowStr),
-        JSON.stringify(payload)
-      ]);
-      
-      var lastVisitRow = visitsSheet.getLastRow();
-      visitsSheet.getRange(lastVisitRow, 6, 1, 2).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // enter_time & exit_time
-      visitsSheet.getRange(lastVisitRow, 17).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // created_at
-      
-      existingVisitUuids[uuid] = true;
-      accepted++;
-      
-      // Оновлюємо розташування кур'єра за візитом
-      try {
+      if (type === "visit" || type === "manual_checkin") {
+        if (existingVisitUuids[uuid]) {
+          duplicates++;
+          accepted++;
+          continue;
+        }
+        
+        // Збираємо рядок візиту в масив замість appendRow()
+        // Колонки: visit_id, event_uuid, courier_id, shift_id, location_id, enter_time, exit_time, duration_seconds, 
+        // enter_lat, enter_lng, exit_lat, exit_lng, accuracy_m, matched_distance_m, source, offline_synced, created_at, raw_payload
+        newVisitRows.push([
+          Utilities.getUuid(),
+          uuid,
+          courierId,
+          shiftId || "",
+          payload.location_id || "",
+          parseDate(payload.enter_time || timestamp),
+          parseDate(payload.exit_time || timestamp),
+          payload.duration_seconds || 0,
+          payload.enter_lat || "",
+          payload.enter_lng || "",
+          payload.exit_lat || "",
+          payload.exit_lng || "",
+          payload.accuracy_m || "",
+          payload.matched_distance_m || "",
+          payload.source || (type === "manual_checkin" ? "manual" : "auto"),
+          payload.offline_synced !== undefined ? payload.offline_synced : true,
+          parseDate(nowStr),
+          JSON.stringify(payload)
+        ]);
+        
+        existingVisitUuids[uuid] = true;
+        accepted++;
+        
+        // Запам'ятовуємо останній візит для оновлення статусу (виконаємо один раз після циклу)
         if (payload.enter_lat && payload.enter_lng) {
-          updateCourierStatus(courierId, name, payload.enter_lat, payload.enter_lng, payload.accuracy_m, null, null);
+          lastVisitPayload = payload;
         }
-      } catch(e) {}
-      
-    } else if (type === "log") {
-      if (existingLogUuids[uuid]) {
-        duplicates++;
+        
+      } else if (type === "log") {
+        if (existingLogUuids[uuid]) {
+          duplicates++;
+          accepted++;
+          continue;
+        }
+        
+        // Збираємо рядок логу в масив замість appendRow()
+        // Колонки: log_id, event_uuid, courier_id, shift_id, event_type, timestamp, payload_json, created_at
+        newLogRows.push([
+          Utilities.getUuid(),
+          uuid,
+          courierId,
+          shiftId || "",
+          payload.event_type || "diagnostic",
+          parseDate(timestamp),
+          JSON.stringify(payload),
+          parseDate(nowStr)
+        ]);
+        
+        existingLogUuids[uuid] = true;
         accepted++;
-        continue;
-      }
-      
-      // Записуємо лог
-      // Колонки: log_id, event_uuid, courier_id, shift_id, event_type, timestamp, payload_json, created_at
-      logsSheet.appendRow([
-        Utilities.getUuid(),
-        uuid,
-        courierId,
-        shiftId || "",
-        payload.event_type || "diagnostic",
-        parseDate(timestamp),
-        JSON.stringify(payload),
-        parseDate(nowStr)
-      ]);
-      
-      var lastLogRow = logsSheet.getLastRow();
-      logsSheet.getRange(lastLogRow, 6).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // timestamp
-      logsSheet.getRange(lastLogRow, 8).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // created_at
-      
-      existingLogUuids[uuid] = true;
-      accepted++;
 
-      // Оновлюємо розташування кур'єра, якщо це heartbeat-сигнал
-      try {
+        // Запам'ятовуємо останній heartbeat для оновлення статусу
         if (payload.event_type === "heartbeat" && payload.details) {
-          var detailsObj = JSON.parse(payload.details);
-          if (detailsObj && detailsObj.latitude && detailsObj.longitude) {
-            var battery = detailsObj.battery !== undefined ? detailsObj.battery : null;
-            updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, battery, null);
-          }
+          lastHeartbeatPayload = payload;
         }
-      } catch(e) {}
-    } else {
-      failed.push({ index: k, error: "Unsupported event_type: " + type });
+      } else {
+        failed.push({ index: k, error: "Unsupported event_type: " + type });
+      }
+    } catch (e) {
+      failed.push({ index: k, error: String(e) });
     }
+  }
+  
+  // Батч-запис візитів (один виклик setValues замість N appendRow)
+  if (newVisitRows.length > 0) {
+    var visitStartRow = visitsSheet.getLastRow() + 1;
+    visitsSheet.getRange(visitStartRow, 1, newVisitRows.length, 18).setValues(newVisitRows);
+  }
+  
+  // Батч-запис логів (один виклик setValues замість N appendRow)
+  if (newLogRows.length > 0) {
+    var logStartRow = logsSheet.getLastRow() + 1;
+    logsSheet.getRange(logStartRow, 1, newLogRows.length, 8).setValues(newLogRows);
+  }
+  
+  // Оновлюємо статус кур'єра один раз після запису всього батчу
+  try {
+    if (lastHeartbeatPayload && lastHeartbeatPayload.details) {
+      var detailsObj = JSON.parse(lastHeartbeatPayload.details);
+      if (detailsObj && detailsObj.latitude && detailsObj.longitude) {
+        var battery = detailsObj.battery !== undefined ? detailsObj.battery : null;
+        updateCourierStatus(courierId, name, detailsObj.latitude, detailsObj.longitude, detailsObj.accuracy_m, battery, null);
+      }
+    } else if (lastVisitPayload) {
+      updateCourierStatus(courierId, name, lastVisitPayload.enter_lat, lastVisitPayload.enter_lng, lastVisitPayload.accuracy_m, null, null);
+    }
+  } catch(e) {
+    Logger.log("Error updating courier status after batch: " + e.toString());
   }
   
   return jsonResponse({
@@ -1072,5 +1118,37 @@ function requestCourierLocationFromDashboard(courierId) {
     return { success: true, message: "Запит надіслано успішно." };
   } else {
     return { success: false, error: "Кур'єра не знайдено." };
+  }
+}
+
+/**
+ * Очищає системні логи, які старіші за 7 днів.
+ * Цю функцію рекомендується запускати щоденно за тригером (Time-driven trigger).
+ */
+function cleanupOldLogs() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var logsSheet = ss.getSheetByName("EventLog");
+  if (!logsSheet) return;
+  
+  var lastRow = logsSheet.getLastRow();
+  if (lastRow <= 1) return;
+  
+  var values = logsSheet.getRange(2, 8, lastRow - 1, 1).getValues(); // 8-ма колонка - це created_at
+  var cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 7); // 7 днів тому
+  
+  var rowsToDelete = 0;
+  for (var i = 0; i < values.length; i++) {
+    var createdAt = new Date(values[i][0]);
+    if (createdAt < cutoffDate) {
+      rowsToDelete++;
+    } else {
+      break; // Оскільки логи записуються хронологічно, всі наступні будуть новішими
+    }
+  }
+  
+  if (rowsToDelete > 0) {
+    logsSheet.deleteRows(2, rowsToDelete);
+    console.log("Видалено " + rowsToDelete + " застарілих рядків логів.");
   }
 }

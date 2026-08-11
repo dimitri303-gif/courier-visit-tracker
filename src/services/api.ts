@@ -9,14 +9,24 @@ export interface LocationResponse {
 }
 
 let responseInterceptor: ((data: any) => void) | null = null;
+let cachedHttpTimeout = 30000;
 
 function processInterceptor(result: any) {
+  if (result && result.config) {
+    ApiService.updateHttpTimeout(result.config);
+  }
   if (responseInterceptor && result) {
     responseInterceptor(result);
   }
 }
 
 export const ApiService = {
+  updateHttpTimeout(config: any) {
+    if (config && config.http_timeout_ms) {
+      cachedHttpTimeout = parseInt(config.http_timeout_ms, 10) || 30000;
+    }
+  },
+
   setResponseInterceptor(interceptor: (data: any) => void) {
     responseInterceptor = interceptor;
   },
@@ -30,21 +40,34 @@ export const ApiService = {
     const baseUrl = await StorageService.getApiUrl();
     const url = `${baseUrl}?action=${action}`;
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), cachedHttpTimeout);
     
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      processInterceptor(result);
+      return result;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Network request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    
-    const result = await response.json();
-    processInterceptor(result);
-    return result;
   },
 
   async login(courierId: string, pin: string): Promise<any> {
@@ -58,26 +81,50 @@ export const ApiService = {
     const baseUrl = await StorageService.getApiUrl();
     const url = `${baseUrl}?action=points&token=${token}&version=${version}`;
     
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), cachedHttpTimeout);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      const result = await response.json();
+      processInterceptor(result);
+      return result;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Network request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    const result = await response.json();
-    processInterceptor(result);
-    return result;
   },
 
   async getConfig(token: string): Promise<any> {
     const baseUrl = await StorageService.getApiUrl();
     const url = `${baseUrl}?action=config&token=${token}`;
     
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), cachedHttpTimeout);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      const result = await response.json();
+      processInterceptor(result);
+      return result;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Network request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    const result = await response.json();
-    processInterceptor(result);
-    return result;
   },
 
   async startShift(

@@ -104,7 +104,26 @@ function setupDefaultSettings(ss) {
     ["manual_checkin_enabled", "true"],
     ["points_version", "1"],
     ["max_stay_minutes", "240"],
-    ["heartbeat_interval_minutes", "10"]
+    ["heartbeat_interval_minutes", "10"],
+    // Нові параметри синхронізації
+    ["sync_backoff_initial_s", "5"],
+    ["sync_backoff_max_s", "300"],
+    ["sync_queue_max_size", "5000"],
+    // Мережеві параметри
+    ["http_timeout_ms", "30000"],
+    // GPS параметри
+    ["gps_single_timeout_ms", "5000"],
+    ["gps_accuracy", "4"],
+    // Детектор виходу з точки
+    ["exit_window_size", "5"],
+    ["exit_threshold", "3"],
+    // Ручний чекін
+    ["manual_checkin_max_distance_m", "200"],
+    // Інтервали UI
+    ["points_sync_interval_ms", "30000"],
+    // Текст нотифікацій
+    ["notification_title", "Відстеження робочої зміни"],
+    ["notification_body", "Додаток фіксує ваші візити на точки доставки."]
   ];
   
   var data = sheet.getDataRange().getValues();
