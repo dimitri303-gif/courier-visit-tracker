@@ -36,6 +36,11 @@ function setupDatabase() {
     "enter_lat", "enter_lng", "exit_lat", "exit_lng", "accuracy_m", "matched_distance_m", "source", "offline_synced", "created_at", "raw_payload"
   ]);
   
+  setupSheet(ss, "Stops", [
+    "stop_id", "courier_id", "shift_id", "start_time", "end_time", "duration_minutes", 
+    "anchor_lat", "anchor_lng", "max_drift_m", "created_at", "map_link"
+  ]);
+  
   setupSheet(ss, "EventLog", [
     "log_id", "event_uuid", "courier_id", "shift_id", "event_type", "timestamp", "payload_json", "created_at"
   ]);
@@ -117,6 +122,9 @@ function setupDefaultSettings(ss) {
     // Детектор виходу з точки
     ["exit_window_size", "5"],
     ["exit_threshold", "3"],
+    // Зупинки (Idle)
+    ["idle_threshold_minutes", "10"],
+    ["idle_radius_m", "20"],
     // Ручний чекін
     ["manual_checkin_max_distance_m", "200"],
     // Інтервали UI

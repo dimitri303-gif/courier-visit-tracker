@@ -80,21 +80,20 @@ export const ManualCheckinScreen: React.FC<ManualCheckinScreenProps> = ({ onNavi
 
             // Якщо координати отримано, перераховуємо відстані та сортуємо точки
             if (cachedPoints.length > 0) {
-              const maxCheckinDistance = config ? parseInt(config.manual_checkin_max_distance_m || '200', 10) : 200;
-              const nearbyPoints = cachedPoints
-                .map((locItem) => ({
-                  ...locItem,
-                  distance: calculateDistance(
-                    coords!.latitude,
-                    coords!.longitude,
-                    locItem.latitude,
-                    locItem.longitude
-                  ),
-                }))
-                .filter(locItem => (locItem.distance || 0) <= maxCheckinDistance);
-
-              nearbyPoints.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-              setLocations(nearbyPoints);
+              // Обчислюємо відстані до всіх точок і сортуємо їх
+              const mappedPoints = cachedPoints.map((locItem) => ({
+                ...locItem,
+                distance: calculateDistance(
+                  coords!.latitude,
+                  coords!.longitude,
+                  locItem.latitude,
+                  locItem.longitude
+                ),
+              }));
+              mappedPoints.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+              
+              // Показуємо всі точки (відсортовані за відстанню), як попросив користувач
+              setLocations(mappedPoints);
             }
           }
         }

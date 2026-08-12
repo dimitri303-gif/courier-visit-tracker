@@ -83,7 +83,13 @@ export const LocationService = {
     }
 
     const hasStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-    if (hasStarted) return;
+    if (hasStarted) {
+      try {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      } catch (e) {
+        console.warn('Could not stop existing tracking before start:', e);
+      }
+    }
 
     const config = await StorageService.getConfig();
     const interval = config ? parseInt(config.location_interval_ms || '15000', 10) : 15000;
@@ -99,7 +105,6 @@ export const LocationService = {
         accuracy: accuracy,
         timeInterval: interval,
         distanceInterval: distanceFilter,
-        // Обов'язково для Android, щоб система не вбивала процес
         foregroundService: {
           notificationTitle: config?.notification_title || 'Відстеження робочої зміни',
           notificationBody: config?.notification_body || 'Додаток фіксує ваші візити на точки доставки.',

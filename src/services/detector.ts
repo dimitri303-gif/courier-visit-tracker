@@ -1,5 +1,5 @@
 import { Location, StorageService } from './storage';
-import { SyncService } from './sync';
+import { SyncService, generateUUID } from './sync';
 import * as Battery from 'expo-battery';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -185,6 +185,95 @@ export const VisitDetector = {
       console.error('Помилка логування heartbeat:', e);
     }
 
+    // Логіка Idle (Зупинки)
+    try {
+      const idleThresholdMinutes = config ? parseFloat(config.idle_threshold_minutes || '10') : 10;
+      const idleRadius = config ? parseFloat(config.idle_radius_m || '20') : 20;
+
+      let idleState = await StorageService.getIdleState();
+      const nowTime = new Date();
+      const nowTimeStr = nowTime.toISOString();
+
+      if (!idleState) {
+        idleState = {
+          anchor_lat: coords.latitude,
+          anchor_lng: coords.longitude,
+          idle_since: nowTimeStr,
+          is_idle: false,
+          stop_uuid: '',
+          max_drift_m: 0,
+        };
+        await StorageService.setIdleState(idleState);
+      } else {
+        const drift = calculateDistance(
+          coords.latitude,
+          coords.longitude,
+          idleState.anchor_lat,
+          idleState.anchor_lng
+        );
+
+        if (drift > idleRadius) {
+          // Рухається
+          const idleTimeMs = nowTime.getTime() - new Date(idleState.idle_since).getTime();
+          
+          if (idleState.is_idle || idleTimeMs >= idleThresholdMinutes * 60000) {
+            const stopUuid = idleState.is_idle ? idleState.stop_uuid : generateUUID();
+            
+            if (!idleState.is_idle) {
+              await SyncService.queueLog('idle_start', 'Retroactive stop start', JSON.stringify({
+                stop_uuid: stopUuid,
+                start_time: idleState.idle_since,
+                anchor_lat: idleState.anchor_lat,
+                anchor_lng: idleState.anchor_lng
+              }));
+            }
+            
+            await SyncService.queueLog('idle_stop', 'Courier started moving', JSON.stringify({
+              stop_uuid: stopUuid,
+              start_time: idleState.idle_since,
+              end_time: nowTimeStr,
+              anchor_lat: idleState.anchor_lat,
+              anchor_lng: idleState.anchor_lng,
+              max_drift_m: Math.round(idleState.max_drift_m)
+            }));
+            SyncService.triggerSync().catch(err => console.warn(err));
+          }
+          
+          idleState = {
+            anchor_lat: coords.latitude,
+            anchor_lng: coords.longitude,
+            idle_since: nowTimeStr,
+            is_idle: false,
+            stop_uuid: '',
+            max_drift_m: 0,
+          };
+          await StorageService.setIdleState(idleState);
+        } else {
+          // Стоїть
+          if (drift > idleState.max_drift_m) {
+            idleState.max_drift_m = drift;
+          }
+
+          const idleTimeMs = nowTime.getTime() - new Date(idleState.idle_since).getTime();
+          if (idleTimeMs >= idleThresholdMinutes * 60000 && !idleState.is_idle) {
+            idleState.is_idle = true;
+            idleState.stop_uuid = generateUUID();
+            
+            await SyncService.queueLog('idle_start', 'Courier is on stop', JSON.stringify({
+              stop_uuid: idleState.stop_uuid,
+              start_time: idleState.idle_since,
+              anchor_lat: idleState.anchor_lat,
+              anchor_lng: idleState.anchor_lng
+            }));
+            SyncService.triggerSync().catch(err => console.warn(err));
+          }
+          await StorageService.setIdleState(idleState);
+        }
+      }
+    } catch (e) {
+      console.error('Помилка логування idle state:', e);
+    }
+
     const now = new Date();
     const nowStr = now.toISOString();
 
@@ -357,6 +446,24 @@ export const VisitDetector = {
       }
     }
     
+    // Закриваємо зупинку, якщо вона активна
+    try {
+      const idleState = await StorageService.getIdleState();
+      if (idleState && idleState.is_idle) {
+        await SyncService.queueLog('idle_stop', 'Shift ended during stop', JSON.stringify({
+          stop_uuid: idleState.stop_uuid,
+          start_time: idleState.idle_since,
+          end_time: endTimeStr,
+          anchor_lat: idleState.anchor_lat,
+          anchor_lng: idleState.anchor_lng,
+          max_drift_m: Math.round(idleState.max_drift_m)
+        }));
+      }
+      await StorageService.clearIdleState();
+    } catch (e) {
+      console.error('Помилка очищення idle state:', e);
+    }
+
     // Скидаємо стан детектора та очищаємо збережені стани
     detectorStates = {};
     cachedLocations = null;

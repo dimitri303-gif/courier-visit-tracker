@@ -2,7 +2,8 @@
   "expo": {
     "name": "Courier Tracker",
     "slug": "courier-visit-tracker",
-    "version": "1.0.7",
+    "owner": "dmytroands-team",
+    "version": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,17 +20,20 @@
       }
     },
     "android": {
+      "versionCode": 14,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
       "package": "com.couriermvp.tracker",
+      "allowBackup": false,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "extra": {

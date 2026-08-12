@@ -7,12 +7,16 @@ import {
   ScrollView,
   Alert,
   SafeAreaView,
+  Linking,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import { StorageService, Shift } from '../services/storage';
 import { LocationService } from '../services/location';
 import { ApiService } from '../services/api';
 import { SyncService, generateUUID } from '../services/sync';
 import { VisitDetector } from '../services/detector';
+import { BatteryOptimizationService } from '../services/batteryOptimization';
 import * as Battery from 'expo-battery';
 import Constants from 'expo-constants';
 
@@ -110,9 +114,64 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const hasPermissions = await LocationService.requestPermissions();
     if (!hasPermissions) {
       Alert.alert(
-        'Доступ обмежено',
-        'Для запуску зміни потрібні дозволи на використання геолокації (зокрема у фоновому режимі).'
+        'Потрібен фоновий дозвіл',
+        'Для роботи додатка під час заблокованого екрану потрібен дозвіл "Дозволити в будь-якому режимі" (Allow all the time).\n\nБудь ласка, перейдіть у налаштування додатка -> Дозволи -> Геолокація -> Дозволити в будь-якому режимі.',
+        [
+          { text: 'Налаштування', onPress: () => Linking.openSettings() },
+          { text: 'Скасувати', style: 'cancel' }
+        ]
       );
+      return;
+    }
+
+    // Запит на сповіщення (Android 13+)
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      try {
+        const notifGranted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          {
+            title: 'Дозвіл на сповіщення',
+            message: 'Без сповіщень фоновий GPS-трекінг буде автоматично зупинятися системою. Будь ласка, дозвольте сповіщення.',
+            buttonPositive: 'Дозволити',
+          }
+        );
+        if (notifGranted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert(
+            'Увага',
+            'Сповіщення вимкнено! Додаток може працювати некоректно у фоні. Увімкніть сповіщення в налаштуваннях додатку.',
+            [
+              { text: 'Налаштування', onPress: () => BatteryOptimizationService.openAppInfoSettings() },
+              { text: 'Ігнорувати', style: 'cancel' }
+            ]
+          );
+        }
+      } catch (e) {
+        console.warn('Error requesting notification permissions:', e);
+      }
+    }
+
+    // Пропонуємо вимкнути оптимізацію батареї
+    if (Platform.OS === 'android') {
+      await new Promise<void>((resolve) => {
+        Alert.alert(
+          'Оптимізація батареї',
+          'Для стабільної роботи GPS у фоні обов\'язково потрібно вимкнути економію батареї для нашого додатка.\n\nНатисніть "Відкрити налаштування", потім знайдіть пункт "Батарея" (або "Використання заряду") і виберіть "Необмежено" (або "Без обмежень").',
+          [
+            { 
+              text: 'Відкрити налаштування', 
+              onPress: async () => {
+                await BatteryOptimizationService.openAppInfoSettings();
+                resolve();
+              }
+            },
+            { 
+              text: 'Продовжити', 
+              style: 'cancel',
+              onPress: () => resolve()
+            }
+          ]
+        );
+      });
     }
 
     const shiftId = generateUUID();

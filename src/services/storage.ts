@@ -24,6 +24,16 @@ export interface SyncEvent {
   payload: any;
 }
 
+export interface IdleState {
+  anchor_lat: number;
+  anchor_lng: number;
+  idle_since: string;
+  is_idle: boolean;
+  stop_uuid: string;
+  max_drift_m: number;
+}
+
+
 const KEYS = {
   API_URL: '@api_url',
   TOKEN: '@session_token',
@@ -37,6 +47,7 @@ const KEYS = {
   LAST_HEARTBEAT: '@last_heartbeat',
   USER_ROLE: '@user_role',
   USER_REGION: '@user_region',
+  IDLE_STATE: '@idle_state',
 };
 
 // Дефолтна адреса бекенду (може бути змінена в екрані Debug)
@@ -176,5 +187,18 @@ export const StorageService = {
     } else {
       await AsyncStorage.removeItem(KEYS.USER_REGION);
     }
+  },
+
+  async getIdleState(): Promise<IdleState | null> {
+    const data = await AsyncStorage.getItem(KEYS.IDLE_STATE);
+    return data ? JSON.parse(data) : null;
+  },
+
+  async setIdleState(state: IdleState): Promise<void> {
+    await AsyncStorage.setItem(KEYS.IDLE_STATE, JSON.stringify(state));
+  },
+
+  async clearIdleState(): Promise<void> {
+    await AsyncStorage.removeItem(KEYS.IDLE_STATE);
   }
 };
