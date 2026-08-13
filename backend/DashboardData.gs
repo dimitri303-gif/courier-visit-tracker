@@ -114,6 +114,10 @@ function getSheetDataAsJson(sheet) {
         headerStr = "stop_id";
       }
     }
+    // Системне перейменування для сумісності з простоями
+    if (sheetName === "CourierStatus" && j === 10) {
+      headerStr = "idle_since";
+    }
     normalizedHeaders.push(headerStr);
   }
   
