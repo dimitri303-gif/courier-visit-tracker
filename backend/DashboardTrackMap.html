@@ -14,8 +14,14 @@
       
       <!-- Filters and Timeline Side Panel -->
       <div class="w-full lg:w-[400px] bg-brand-card border border-slate-200 rounded-2xl p-4 flex flex-col gap-4 shadow-sm shrink-0">
-        <div class="border-b border-slate-100 pb-3">
+        <div class="border-b border-slate-100 pb-3 flex justify-between items-center">
           <h3 class="font-bold text-slate-800">Параметри треку</h3>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] font-bold text-slate-500">Регіон:</span>
+            <select id="track-region-filter" onchange="onRegionFilterChange()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 outline-none focus:border-brand-main font-semibold cursor-pointer">
+              <option value="all">Всі</option>
+            </select>
+          </div>
         </div>
         
         <!-- Filters Grid -->
@@ -86,6 +92,15 @@
   let trackLeafletMap = null;
   let trackMapMarkers = [];
   let trackPolyline = null;
+  let trackRegionsPopulated = false;
+
+  function onRegionFilterChange() {
+    const courierSelect = document.getElementById('track-courier-filter');
+    if (courierSelect) {
+      courierSelect.value = '';
+    }
+    initTrackMap(false);
+  }
 
   function switchTab(tabId) {
     activeTab = tabId;
@@ -143,12 +158,44 @@
       timeToSelect.value = '23:59';
     }
     
+    // Populate regions if not done yet
+    const regionSelect = document.getElementById('track-region-filter');
+    if (regionSelect && (!trackRegionsPopulated || !isBackground) && rawData) {
+      const prevReg = regionSelect.value;
+      regionSelect.innerHTML = '<option value="all">Всі</option>';
+      const regions = new Set();
+      const couriers = rawData.couriers || [];
+      couriers.forEach(c => {
+        const reg = c.region ? String(c.region).trim() : '';
+        if (reg !== '') regions.add(reg);
+      });
+      const sortedRegions = Array.from(regions).sort();
+      sortedRegions.forEach(reg => {
+        const opt = document.createElement('option');
+        opt.value = reg;
+        opt.textContent = reg;
+        regionSelect.appendChild(opt);
+      });
+      if (prevReg && sortedRegions.includes(prevReg)) {
+        regionSelect.value = prevReg;
+      } else {
+        regionSelect.value = 'all';
+      }
+      trackRegionsPopulated = true;
+    }
+
     // 2. Populate Couriers
     if (courierSelect) {
+      const selectedRegion = regionSelect ? regionSelect.value : 'all';
       const prevVal = courierSelect.value;
       courierSelect.innerHTML = '';
       const couriers = rawData.couriers || [];
-      couriers.forEach(c => {
+      const filteredCouriers = couriers.filter(c => {
+        if (selectedRegion === 'all') return true;
+        const cRegion = c.region ? String(c.region).trim() : '';
+        return cRegion === selectedRegion;
+      });
+      filteredCouriers.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.courier_id;
         opt.textContent = `${c.name} (${c.courier_id})`;
