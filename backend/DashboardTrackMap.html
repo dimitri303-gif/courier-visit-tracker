@@ -26,6 +26,17 @@
         
         <!-- Filters Grid -->
         <div class="space-y-3">
+          <!-- Toggle Clients on Map -->
+          <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              🏢 Відобразити клієнтів
+            </span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="track-show-locations" onchange="renderTrackMap()" class="sr-only peer">
+              <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-main"></div>
+            </label>
+          </div>
+
           <div class="grid grid-cols-2 gap-3">
             <div class="flex flex-col gap-1">
               <label for="track-courier-filter" class="text-xs font-semibold text-slate-500">Кур’єр:</label>
@@ -494,6 +505,68 @@
       }
     });
     
+    // Render Locations (Clients) if toggle is checked
+    const showLocations = document.getElementById('track-show-locations')?.checked || false;
+    const locCoords = [];
+    if (showLocations) {
+      const regionSelect = document.getElementById('track-region-filter');
+      const selectedRegion = regionSelect ? regionSelect.value : 'all';
+      const locations = rawData.locations || [];
+      locations.forEach(loc => {
+        const lat = parseFloat(loc.latitude);
+        const lng = parseFloat(loc.longitude);
+        const radius = parseFloat(loc.radius_m) || 30;
+        const locRegion = loc.region ? String(loc.region).trim() : '';
+        const isActive = loc.active === 'true' || loc.active === true;
+        
+        if (!isActive) return;
+        if (selectedRegion !== 'all' && locRegion !== selectedRegion) return;
+        
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          locCoords.push([lat, lng]);
+          
+          const circle = L.circle([lat, lng], {
+            radius: radius,
+            color: '#6366f1',
+            fillColor: '#6366f1',
+            fillOpacity: 0.08,
+            weight: 1.5,
+            interactive: false
+          }).addTo(trackLeafletMap);
+          
+          const marker = L.circleMarker([lat, lng], {
+            radius: 5,
+            fillColor: '#6366f1',
+            color: '#ffffff',
+            weight: 1.5,
+            opacity: 1,
+            fillOpacity: 1
+          }).addTo(trackLeafletMap);
+          
+          const popupContent = `
+            <div class="text-xs space-y-1 p-0.5">
+              <div class="font-bold text-slate-800 text-sm">${loc.name}</div>
+              <div class="text-slate-500 font-mono text-[10px]">Код локації: <span class="font-semibold text-indigo-650">${loc.location_id}</span></div>
+              <div class="text-slate-700"><b>Адреса:</b> ${loc.address}</div>
+              <div class="text-slate-500 pt-0.5">Регіон: <span class="font-semibold text-slate-700">${loc.region || 'Всі'}</span></div>
+              <div class="text-slate-500">Радіус детекції: <span class="font-semibold text-slate-700">${radius} м</span></div>
+              <div class="text-slate-500">Тип: <span class="font-semibold text-slate-700">${loc.indoor === 'true' || loc.indoor === true ? 'Критий (Indoor)' : 'Відкритий (Outdoor)'}</span></div>
+            </div>
+          `;
+          
+          marker.bindPopup(popupContent);
+          marker.bindTooltip(loc.name, {
+            direction: 'top',
+            offset: [0, -5],
+            className: 'bg-white border border-slate-200 text-slate-850 font-semibold px-2 py-1 rounded shadow-sm text-xs z-[2000]'
+          });
+          
+          trackMapMarkers.push(circle);
+          trackMapMarkers.push(marker);
+        }
+      });
+    }
+    
     document.getElementById('track-map-counter').textContent = `${heartbeats.length} точок на треку`;
     
     const allCoords = [];
@@ -511,6 +584,8 @@
     
     if (allCoords.length > 0 && !isBackground) {
       trackLeafletMap.fitBounds(allCoords, { padding: [50, 50], maxZoom: 15 });
+    } else if (allCoords.length === 0 && locCoords.length > 0 && !isBackground) {
+      trackLeafletMap.fitBounds(locCoords, { padding: [50, 50], maxZoom: 15 });
     }
     
     renderTrackTimeline(matchedVisits, matchedStops, heartbeats, locMap, fromMinutes, toMinutes, dateStr, courierId);
