@@ -442,7 +442,7 @@
       
       let stopBadgeHtml = "";
       if (isIdleAlert) {
-        stopBadgeHtml = '\n                <span class="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-150 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 animate-pulse">\n                  ⚠️ Зупинка > ' + idleThreshold + ' хв\n                </span>';
+        stopBadgeHtml = '\n                <span class="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-150 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 animate-pulse">\n                  ⚠️ Зупинка > ' + idleThreshold + ' хв (триває ' + idleMin + ' хв)\n                </span>';
       }
       
       const card = document.createElement('div');
