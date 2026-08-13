@@ -37,15 +37,14 @@ function doGet(e) {
 
   if (action === "dashboard") {
     try {
-      var page = e.parameter.page || 'maps';
+      var page = e.parameter.page || 'combined';
       var PAGE_MAP = {
-        'maps': 'DashboardMaps',
         'track-map': 'DashboardTrackMap',
         'analytics': 'DashboardAnalytics',
         'database': 'DashboardDB',
         'combined': 'DashboardCombined'
       };
-      var templateName = PAGE_MAP[page] || 'DashboardMaps';
+      var templateName = PAGE_MAP[page] || 'DashboardCombined';
       
       // Зберігаємо глобальний контекст перед створенням шаблону
       currentTemplateContext.currentPage = page;

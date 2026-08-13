@@ -17,7 +17,7 @@
     currentPage = '<?= currentPage ?>';
     
     function handleHashChange() {
-      const hash = window.location.hash.replace('#', '') || (currentPage === 'maps' ? 'map' : currentPage === 'combined' ? 'combined' : currentPage === 'analytics' ? 'analytics' : 'shifts');
+      const hash = window.location.hash.replace('#', '') || (currentPage === 'combined' ? 'combined' : currentPage === 'analytics' ? 'analytics' : 'shifts');
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('local-active'));
       const activeNav = document.getElementById('nav-' + hash);
       if (activeNav) activeNav.classList.add('local-active');
