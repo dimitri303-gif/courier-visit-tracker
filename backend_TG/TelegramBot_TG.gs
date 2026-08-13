@@ -1,0 +1,293 @@
+/**
+ * TelegramBot_TG.gs
+ * Логіка відповідей бота та авторизації кур'єрів.
+ */
+
+function handleTelegramMessage(message) {
+  var chatId = message.chat.id;
+  var text = message.text || "";
+  
+  if (text === "/start") {
+    sendWelcomeMessage(chatId);
+    return;
+  }
+  
+  if (message.contact) {
+    handleContactRegistration(chatId, message.contact.phone_number);
+    return;
+  }
+  
+  if (text === "▶️ Почати зміну") {
+    startShiftCommand(chatId);
+    return;
+  }
+  
+  if (text === "⏹ Завершити зміну") {
+    endShiftCommand(chatId);
+    return;
+  }
+  
+  // Якщо кур'єр просто надсилає разову локацію
+  if (message.location) {
+    handleTelegramLocation(message);
+    return;
+  }
+}
+
+function sendWelcomeMessage(chatId) {
+  var text = "👋 Вітаємо у системі Courier Tracker!\n\nДля початку роботи надішліть свій номер телефону (натисніть кнопку нижче).";
+  var keyboard = {
+    "keyboard": [
+      [{"text": "📱 Надіслати номер телефону", "request_contact": true}]
+    ],
+    "resize_keyboard": true,
+    "one_time_keyboard": true
+  };
+  
+  sendTelegramRequest("sendMessage", {
+    "chat_id": chatId,
+    "text": text,
+    "reply_markup": keyboard
+  });
+}
+
+function handleContactRegistration(chatId, phone) {
+  try {
+    if (!phone) {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId,
+        "text": "❌ Номер телефону не передано. Спробуйте ще раз."
+      });
+      return;
+    }
+    
+    // Нормалізація телефону: залишаємо лише цифри
+    var cleanPhone = String(phone).replace(/\D/g, '');
+    if (cleanPhone.startsWith("38")) cleanPhone = cleanPhone.substring(2);
+    
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName("Couriers");
+    if (!sheet) {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId,
+        "text": "❌ Аркуш 'Couriers' не знайдено в таблиці."
+      });
+      return;
+    }
+    
+    var rows = sheet.getDataRange().getValues();
+    var courierId = null;
+    var courierName = "";
+    var matchedRowIndex = -1;
+    
+    // Пошук кур'єра за телефоном (колонка C / індекс 2)
+    for (var i = 1; i < rows.length; i++) {
+      var rowPhone = String(rows[i][2]).replace(/\D/g, '');
+      if (rowPhone.startsWith("38")) rowPhone = rowPhone.substring(2);
+      
+      if (rowPhone === cleanPhone && rowPhone.length >= 9) {
+        courierId = String(rows[i][0]);
+        courierName = String(rows[i][1]);
+        matchedRowIndex = i + 1; // 1-based index в Sheets
+        break;
+      }
+    }
+    
+    if (courierId && matchedRowIndex > 0) {
+      // Безпечно записуємо токен (chatId) у колонку 5 (E)
+      try {
+        sheet.getRange(matchedRowIndex, 5).setValue(String(chatId));
+        // Якщо є 7+ колонок - пишемо платформу
+        if (sheet.getMaxColumns() >= 7) {
+          sheet.getRange(matchedRowIndex, 7).setValue("telegram");
+        }
+      } catch (sheetErr) {
+        Logger.log("Sheet write error: " + sheetErr.toString());
+      }
+      
+      // Зберігаємо прив'язку в CacheService
+      try {
+        var cache = CacheService.getScriptCache();
+        cache.put("chat_" + chatId, courierId, 21600); // 6 годин
+      } catch (cacheErr) {
+        Logger.log("Cache error: " + cacheErr.toString());
+      }
+      
+      var welcomeText = "✅ Авторизація успішна, " + courierName + "!\n\nВикористовуйте кнопки нижче для управління зміною.";
+      var keyboard = {
+        "keyboard": [
+          [{"text": "▶️ Почати зміну"}, {"text": "⏹ Завершити зміну"}]
+        ],
+        "resize_keyboard": true
+      };
+      
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId,
+        "text": welcomeText,
+        "reply_markup": keyboard
+      });
+    } else {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId,
+        "text": "❌ Ваш номер телефону (" + phone + ") не знайдено в списку кур'єрів.\nЗверніться до логіста/адміністратора для додавання."
+      });
+    }
+  } catch (err) {
+    Logger.log("handleContactRegistration error: " + err.toString());
+    sendTelegramRequest("sendMessage", {
+      "chat_id": chatId,
+      "text": "⚠️ Помилка під час реєстрації: " + err.toString()
+    });
+  }
+}
+
+function getCourierIdFromChat(chatId) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var courierId = cache.get("chat_" + chatId);
+    if (courierId) return courierId;
+  } catch(e) {}
+  
+  // Якщо немає в кеші - шукаємо в базі по токену
+  try {
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName("Couriers");
+    if (!sheet) return null;
+    
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][4]) === String(chatId)) {
+        var cId = String(rows[i][0]);
+        try {
+          var c = CacheService.getScriptCache();
+          c.put("chat_" + chatId, cId, 21600);
+        } catch(e) {}
+        return cId;
+      }
+    }
+  } catch(e) {
+    Logger.log("getCourierIdFromChat error: " + e.toString());
+  }
+  
+  return null;
+}
+
+function startShiftCommand(chatId) {
+  try {
+    var courierId = getCourierIdFromChat(chatId);
+    if (!courierId) {
+      sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "Спочатку авторизуйтесь через /start"});
+      return;
+    }
+    
+    var shiftId = generateUUID();
+    var startTime = new Date();
+    
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName("Shifts");
+    if (!sheet) return;
+    
+    // Автозакриття попередніх відкритих змін (колонка 9 / index 8 == "active")
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var numRows = Math.min(lastRow - 1, 100);
+      var startR = lastRow - numRows + 1;
+      var range = sheet.getRange(startR, 1, numRows, 10);
+      var rows = range.getValues();
+      
+      for (var i = 0; i < rows.length; i++) {
+        if (String(rows[i][1]) === courierId && String(rows[i][8]) === "active") {
+          var prevStart = new Date(rows[i][2]);
+          var durationMins = Math.round((startTime.getTime() - prevStart.getTime()) / 60000);
+          var targetRow = startR + i;
+          sheet.getRange(targetRow, 4).setValue(startTime); // end_time
+          sheet.getRange(targetRow, 5).setValue(durationMins); // duration_minutes
+          sheet.getRange(targetRow, 9).setValue("auto-closed"); // status
+          sheet.getRange(targetRow, 10).setValue("Автоматично закрито новою зміною з Telegram");
+        }
+      }
+    }
+    
+    // Створення нової зміни (10 колонок)
+    sheet.appendRow([
+      shiftId,
+      courierId,
+      startTime,
+      "", // end_time
+      "", // duration_minutes
+      "telegram", // device_platform
+      "1.0.0", // app_version
+      "tg_" + chatId, // device_id
+      "active", // status
+      "Started via Telegram Bot" // notes
+    ]);
+    
+    // Зберігаємо ID активної зміни в кеш
+    try {
+      var cache = CacheService.getScriptCache();
+      cache.put("shift_" + courierId, shiftId, 21600);
+    } catch(e) {}
+    
+    var text = "🟢 Зміну розпочато!\n\nТепер натисніть на **Скріпку (📎)** ➡️ **«Геопозиція»** ➡️ **«Транслювати мою геопозицію» (Live Location)** на 8 годин.";
+    sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": text, "parse_mode": "Markdown"});
+  } catch (err) {
+    Logger.log("startShiftCommand error: " + err.toString());
+    sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "⚠️ Помилка старту зміни: " + err.toString()});
+  }
+}
+
+function endShiftCommand(chatId) {
+  try {
+    var courierId = getCourierIdFromChat(chatId);
+    if (!courierId) return;
+    
+    var cache = CacheService.getScriptCache();
+    var endTime = new Date();
+    
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName("Shifts");
+    if (!sheet) return;
+    
+    var lastRow = sheet.getLastRow();
+    var closed = false;
+    
+    if (lastRow > 1) {
+      var numRows = Math.min(lastRow - 1, 100);
+      var startR = lastRow - numRows + 1;
+      var rows = sheet.getRange(startR, 1, numRows, 10).getValues();
+      
+      for (var i = rows.length - 1; i >= 0; i--) {
+        if (String(rows[i][1]) === courierId && String(rows[i][8]) === "active") {
+          var prevStart = new Date(rows[i][2]);
+          var durationMins = Math.round((endTime.getTime() - prevStart.getTime()) / 60000);
+          var targetRow = startR + i;
+          sheet.getRange(targetRow, 4).setValue(endTime);
+          sheet.getRange(targetRow, 5).setValue(durationMins);
+          sheet.getRange(targetRow, 9).setValue("ended");
+          closed = true;
+          break;
+        }
+      }
+    }
+    
+    try {
+      cache.remove("shift_" + courierId);
+      cache.remove("state_TG_" + courierId);
+    } catch(e) {}
+    
+    if (closed) {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId, 
+        "text": "🔴 Зміну успішно завершено!\nНе забудьте зупинити трансляцію геопозиції."
+      });
+    } else {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId, 
+        "text": "У вас немає активної зміни."
+      });
+    }
+  } catch (err) {
+    Logger.log("endShiftCommand error: " + err.toString());
+    sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "⚠️ Помилка завершення зміни: " + err.toString()});
+  }
+}
