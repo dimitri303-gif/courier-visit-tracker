@@ -1,0 +1,612 @@
+<?!= include('DashboardHeader'); ?>
+<div id="tab-shifts" class="tab-pane hidden flex flex-col gap-6">
+      
+      <!-- Filters Toolbar -->
+      <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="font-black text-slate-800 text-lg md:text-xl">Звіти робочих змін</h2>
+          <p class="text-xs text-slate-505 mt-0.5">Аналітика та деталі робочих змін кур’єрів</p>
+        </div>
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">З</span>
+            <input type="date" id="shifts-filter-date-start" onchange="applyShiftsFilters()" class="bg-transparent text-xs text-slate-705 outline-none border-none cursor-pointer" />
+          </div>
+          <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">По</span>
+            <input type="date" id="shifts-filter-date-end" onchange="applyShiftsFilters()" class="bg-transparent text-xs text-slate-705 outline-none border-none cursor-pointer" />
+          </div>
+          <select id="shifts-filter-region" onchange="applyShiftsFilters()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+            <option value="all">Всі філії</option>
+          </select>
+          <select id="shifts-filter-courier" onchange="applyShiftsFilters()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+            <option value="all">Всі кур’єри</option>
+          </select>
+          <button onclick="resetShiftsFilters()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all border border-slate-200">
+            Скинути
+          </button>
+        </div>
+      </div>
+      <!-- Scorecards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Загальна кількість змін</p>
+          <p id="stat-total-shifts" class="text-3xl font-bold text-slate-800">0</p>
+        </div>
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Всього відпрацьовано годин</p>
+          <p id="stat-total-hours" class="text-3xl font-bold text-indigo-600">0 <span class="text-sm font-normal text-slate-500">год</span></p>
+        </div>
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Середня зміна</p>
+          <p id="stat-avg-shift" class="text-3xl font-bold text-emerald-400">0 <span class="text-sm font-normal text-slate-500">год</span></p>
+        </div>
+      </div>
+
+      <!-- Shifts Analytics Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chart 1: Working hours per courier -->
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm col-span-2 flex flex-col">
+          <h3 class="font-bold text-slate-700 text-sm mb-4">Сумарний робочий час за кур’єрами (хвилин)</h3>
+          <div class="h-[280px] relative">
+            <canvas id="chart-shifts-hours"></canvas>
+          </div>
+        </div>
+        <!-- Diagnostic Statistics -->
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col gap-4">
+          <h3 class="font-bold text-slate-700 text-sm border-b border-slate-100 pb-2">Статистика пристроїв</h3>
+          
+          <div class="space-y-4 flex-1 flex flex-col justify-center">
+            <!-- Platform ratio -->
+            <div>
+              <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Android OS</span>
+                <span id="stat-device-android" class="text-slate-800">0%</span>
+              </div>
+              <div class="w-full bg-slate-100 rounded-full h-2.5">
+                <div id="bar-device-android" class="bg-indigo-650 h-2.5 rounded-full" style="width: 0%"></div>
+              </div>
+            </div>
+            
+            <!-- iOS ratio -->
+            <div>
+              <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>iOS (Web Fallback)</span>
+                <span id="stat-device-ios" class="text-slate-800">0%</span>
+              </div>
+              <div class="w-full bg-slate-100 rounded-full h-2.5">
+                <div id="bar-device-ios" class="bg-cyan-650 h-2.5 rounded-full" style="width: 0%"></div>
+              </div>
+            </div>
+            
+            <!-- Auto-closed shifts status -->
+            <div class="bg-amber-50 border border-amber-200/60 rounded-xl p-3.5 mt-2 text-amber-900">
+              <div class="flex items-center gap-2 text-amber-700 text-xs font-bold mb-1">
+                <span>⚠️</span> Автозакриття системно
+              </div>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Кількість змін, автоматично закритих системою через відсутність активності наприкінці дня: 
+                <span id="stat-autoclosed-count" class="font-bold text-slate-800">0</span>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shifts Table -->
+      <div class="bg-brand-card border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
+          <h3 class="font-bold text-slate-800">Робочі зміни</h3>
+          <input id="shifts-search" type="text" placeholder="Пошук кур’єра..." oninput="renderShiftsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-800 outline-none focus:border-brand-main focus:bg-white" />
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-650 font-bold">
+              <tr>
+                <th class="px-6 py-4">Кур’єр</th>
+                <th class="px-6 py-4">Початок зміни</th>
+                <th class="px-6 py-4">Кінець зміни</th>
+                <th class="px-6 py-4">Тривалість</th>
+                <th class="px-6 py-4">Платформа</th>
+                <th class="px-6 py-4">Версія додатку</th>
+                <th class="px-6 py-4">Статус</th>
+              </tr>
+            </thead>
+            <tbody id="shifts-table-body" class="divide-y divide-slate-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+        <div id="shifts-empty" class="hidden py-8 text-center text-slate-500">Змін не знайдено.</div>
+      </div>
+    </div>
+<div id="tab-database" class="tab-pane hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- Locations List -->
+      <div class="bg-brand-card border border-slate-200 rounded-2xl shadow-sm p-5 flex flex-col gap-4">
+        <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-3">
+          <div>
+            <h3 class="font-bold text-slate-800 text-lg">Гео-точки доставки (Locations)</h3>
+            <p class="text-xs text-slate-500">Всього точок у базі даних: <span id="db-locations-count">0</span></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="db-locations-filter-region" onchange="renderDbLocations()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі філії</option>
+            </select>
+            <input id="db-locations-search" type="text" placeholder="Шукати локацію/адресу..." oninput="renderDbLocations()" class="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs text-slate-800 outline-none focus:border-brand-main focus:bg-white" />
+          </div>
+        </div>
+        
+        <div class="overflow-y-auto max-h-[500px] space-y-2 pr-1" id="db-locations-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+      
+      <!-- Couriers List -->
+      <div class="bg-brand-card border border-slate-200 rounded-2xl shadow-sm p-5 flex flex-col gap-4">
+        <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-3">
+          <div>
+            <h3 class="font-bold text-slate-800 text-lg">Зареєстровані кур’єри (Couriers)</h3>
+            <p class="text-xs text-slate-500">Всього кур’єрів: <span id="db-couriers-count">0</span></p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <select id="db-couriers-filter-region" onchange="renderDbCouriers()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі філії</option>
+            </select>
+            <select id="db-couriers-filter-status" onchange="renderDbCouriers()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі статуси</option>
+              <option value="active">На зміні (Працює)</option>
+              <option value="ended">Поза зміною</option>
+            </select>
+            <input id="db-couriers-search" type="text" placeholder="Шукати за ім'ям..." oninput="renderDbCouriers()" class="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs text-slate-800 outline-none focus:border-brand-main focus:bg-white w-full sm:w-auto" />
+          </div>
+        </div>
+        
+        <div class="overflow-y-auto max-h-[500px] space-y-2 pr-1" id="db-couriers-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+      
+    </div>
+<script>
+  let activeTab = 'shifts';
+  let charts = {};
+
+  function switchTab(tabId) {
+    activeTab = tabId;
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+    const pane = document.getElementById('tab-' + tabId);
+    if (pane) pane.classList.remove('hidden');
+    renderCurrentTab();
+  }
+
+  function renderCurrentTab(isBackground = false) {
+    if (!rawData) return;
+    if (activeTab === 'shifts') {
+      populateShiftsFilters();
+      renderShiftsScorecards();
+      renderShiftsCharts();
+      renderShiftsTable();
+    } else if (activeTab === 'database') {
+      populateDatabaseFilters();
+      renderDbLocations();
+      renderDbCouriers();
+    }
+  }
+
+  // Filtered shifts selector
+    function getFilteredShifts() {
+      if (!rawData) return [];
+      const shifts = rawData.shifts || [];
+      const couriers = rawData.couriers || [];
+      
+      const courierMap = {};
+      couriers.forEach(c => { courierMap[c.courier_id] = c; });
+      
+      const filterDateStart = document.getElementById('shifts-filter-date-start').value;
+      const filterDateEnd = document.getElementById('shifts-filter-date-end').value;
+      const filterRegion = document.getElementById('shifts-filter-region').value;
+      const filterCourier = document.getElementById('shifts-filter-courier').value;
+      
+      return shifts.filter(s => {
+        // 1. Date filter (match by start_time)
+        if (s.start_time) {
+          const startDate = s.start_time.split('T')[0];
+          if (filterDateStart && startDate < filterDateStart) return false;
+          if (filterDateEnd && startDate > filterDateEnd) return false;
+        } else {
+          if (filterDateStart || filterDateEnd) return false;
+        }
+        
+        // 2. Courier Filter
+        if (filterCourier !== 'all' && s.courier_id !== filterCourier) {
+          return false;
+        }
+        
+        // 3. Region Filter
+        if (filterRegion !== 'all') {
+          const cour = courierMap[s.courier_id];
+          const courRegion = cour && cour.region ? String(cour.region).trim() : '';
+          if (courRegion !== filterRegion) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+    }
+
+    // Populate dropdown lists for shifts tab
+    function populateShiftsFilters() {
+      if (!rawData) return;
+      
+      const regionDropdown = document.getElementById('shifts-filter-region');
+      const courierDropdown = document.getElementById('shifts-filter-courier');
+      
+      if (!regionDropdown || !courierDropdown) return;
+      
+      const currentRegion = regionDropdown.value;
+      const currentCourier = courierDropdown.value;
+      
+      // Populate Regions
+      const locations = rawData.locations || [];
+      const couriers = rawData.couriers || [];
+      const regionsSet = new Set();
+      locations.forEach(l => { if (l.region) regionsSet.add(String(l.region).trim()); });
+      couriers.forEach(c => { if (c.region) regionsSet.add(String(c.region).trim()); });
+      
+      regionDropdown.innerHTML = '<option value="all">Всі філії</option>';
+      Array.from(regionsSet).sort().forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        regionDropdown.appendChild(opt);
+      });
+      
+      if (currentRegion && Array.from(regionsSet).includes(currentRegion)) {
+        regionDropdown.value = currentRegion;
+      } else {
+        regionDropdown.value = 'all';
+      }
+      
+      // Populate Couriers
+      courierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
+      couriers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.courier_id;
+        opt.textContent = c.name;
+        courierDropdown.appendChild(opt);
+      });
+      
+      if (currentCourier && couriers.some(c => c.courier_id === currentCourier)) {
+        courierDropdown.value = currentCourier;
+      } else {
+        courierDropdown.value = 'all';
+      }
+    }
+
+    // Trigger shifts filters apply
+    function applyShiftsFilters() {
+      renderShiftsScorecards();
+      renderShiftsCharts();
+      renderShiftsTable();
+    }
+    
+    // Reset shifts filters
+    function resetShiftsFilters() {
+      document.getElementById('shifts-filter-date-start').value = '';
+      document.getElementById('shifts-filter-date-end').value = '';
+      document.getElementById('shifts-filter-region').value = 'all';
+      document.getElementById('shifts-filter-courier').value = 'all';
+      applyShiftsFilters();
+    }
+    
+    function renderShiftsScorecards() {
+      const shifts = getFilteredShifts();
+      document.getElementById('stat-total-shifts').textContent = shifts.length;
+      
+      let totalMinutes = 0;
+      let completedCount = 0;
+      
+      shifts.forEach(s => {
+        const mins = parseFloat(s.duration_minutes);
+        if (!isNaN(mins) && mins > 0) {
+          totalMinutes += mins;
+          completedCount++;
+        }
+      });
+      
+      const totalHours = Math.round(totalMinutes / 60);
+      document.getElementById('stat-total-hours').innerHTML = `${totalHours} <span class="text-sm font-normal text-slate-500">год</span>`;
+      
+      const avgMins = completedCount > 0 ? totalMinutes / completedCount : 0;
+      const avgHours = (avgMins / 60).toFixed(1);
+      document.getElementById('stat-avg-shift').innerHTML = `${avgHours} <span class="text-sm font-normal text-slate-500">год</span>`;
+    }
+    
+    function renderShiftsCharts() {
+      const shifts = getFilteredShifts();
+      const couriers = rawData.couriers || [];
+      
+      if (charts.shiftsHours) charts.shiftsHours.destroy();
+      
+      // Calculate total work minutes per courier
+      const courierNames = {};
+      couriers.forEach(c => { courierNames[c.courier_id] = c.name; });
+      
+      const hoursByCourier = {};
+      let androidCount = 0;
+      let iosCount = 0;
+      let autoClosedCount = 0;
+      
+      shifts.forEach(s => {
+        const name = courierNames[s.courier_id] || s.courier_id;
+        const mins = parseFloat(s.duration_minutes);
+        if (!isNaN(mins) && mins > 0) {
+          hoursByCourier[name] = (hoursByCourier[name] || 0) + mins;
+        }
+        
+        if (s.device_platform === 'android') androidCount++;
+        else if (s.device_platform === 'ios') iosCount++;
+        
+        if (s.status === 'auto-closed') autoClosedCount++;
+      });
+      
+      // Chart
+      const labels = Object.keys(hoursByCourier);
+      const data = labels.map(l => hoursByCourier[l]);
+      
+      const ctx = document.getElementById('chart-shifts-hours').getContext('2d');
+      charts.shiftsHours = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: 'rgba(99, 102, 241, 0.75)',
+            borderColor: '#6366f1',
+            borderWidth: 1,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(15,23,42,0.06)' }, ticks: { color: '#64748b' } },
+            x: { grid: { display: false }, ticks: { color: '#64748b' } }
+          }
+        }
+      });
+      
+      // Platform diagnostics percents
+      const totalPlatforms = androidCount + iosCount;
+      const andPercent = totalPlatforms > 0 ? Math.round((androidCount / totalPlatforms) * 100) : 0;
+      const iosPercent = totalPlatforms > 0 ? Math.round((iosCount / totalPlatforms) * 100) : 0;
+      
+      document.getElementById('stat-device-android').textContent = `${andPercent}%`;
+      document.getElementById('bar-device-android').style.width = `${andPercent}%`;
+      document.getElementById('stat-device-ios').textContent = `${iosPercent}%`;
+      document.getElementById('bar-device-ios').style.width = `${iosPercent}%`;
+      
+      // Auto closed count
+      document.getElementById('stat-autoclosed-count').textContent = autoClosedCount;
+    }
+    
+    function renderShiftsTable() {
+      const tbody = document.getElementById('shifts-table-body');
+      const emptyDiv = document.getElementById('shifts-empty');
+      const searchQuery = document.getElementById('shifts-search').value.toLowerCase().trim();
+      
+      const shifts = getFilteredShifts();
+      const couriers = rawData.couriers || [];
+      
+      tbody.innerHTML = '';
+      
+      const courierMap = {};
+      couriers.forEach(c => { courierMap[c.courier_id] = c.name; });
+      
+      const filtered = shifts.filter(s => {
+        const name = (courierMap[s.courier_id] || s.courier_id).toLowerCase();
+        return name.includes(searchQuery);
+      });
+      
+      if (filtered.length === 0) {
+        emptyDiv.classList.remove('hidden');
+        return;
+      }
+      emptyDiv.classList.add('hidden');
+      
+      // Sort newest first
+      filtered.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+      
+      filtered.forEach(s => {
+        const cName = courierMap[s.courier_id] || s.courier_id;
+        const mins = parseFloat(s.duration_minutes);
+        let durationText = 'в процесі';
+        
+        if (s.status !== 'active') {
+          if (!isNaN(mins)) {
+            const h = Math.floor(mins / 60);
+            const m = Math.round(mins % 60);
+            durationText = h > 0 ? `${h} год ${m} хв` : `${m} хв`;
+          } else {
+            durationText = 'н/д';
+          }
+        }
+        
+        let statusBadge = '';
+        if (s.status === 'active') {
+          statusBadge = '<span class="bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold border border-emerald-100">Активна</span>';
+        } else if (s.status === 'ended') {
+          statusBadge = '<span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-bold border border-indigo-100">Завершена</span>';
+        } else {
+          statusBadge = '<span class="bg-amber-50 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold border border-amber-100">Автозакрита</span>';
+        }
+        
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-slate-50 transition-colors';
+        row.innerHTML = `
+          <td class="px-6 py-3.5 font-bold text-slate-800">${cName}</td>
+          <td class="px-6 py-3.5 text-slate-655 text-xs font-semibold">${formatDateStr(s.start_time)}</td>
+          <td class="px-6 py-3.5 text-slate-655 text-xs font-semibold">${formatDateStr(s.end_time)}</td>
+          <td class="px-6 py-3.5 text-slate-800 font-bold text-xs">${durationText}</td>
+          <td class="px-6 py-3.5 text-slate-500 text-xs font-mono font-medium">${s.device_platform || 'н/д'}</td>
+          <td class="px-6 py-3.5 text-slate-500 text-xs font-medium">${s.app_version || 'н/д'}</td>
+          <td class="px-6 py-3.5">${statusBadge}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+  // Populate dropdowns for database tab
+    function populateDatabaseFilters() {
+      if (!rawData) return;
+      const locRegionDropdown = document.getElementById('db-locations-filter-region');
+      const courRegionDropdown = document.getElementById('db-couriers-filter-region');
+      
+      if (!locRegionDropdown || !courRegionDropdown) return;
+      
+      const currentLocRegion = locRegionDropdown.value;
+      const currentCourRegion = courRegionDropdown.value;
+      
+      const locations = rawData.locations || [];
+      const couriers = rawData.couriers || [];
+      const regionsSet = new Set();
+      locations.forEach(l => { if (l.region) regionsSet.add(String(l.region).trim()); });
+      couriers.forEach(c => { if (c.region) regionsSet.add(String(c.region).trim()); });
+      
+      const sortedRegions = Array.from(regionsSet).sort();
+      
+      locRegionDropdown.innerHTML = '<option value="all">Всі філії</option>';
+      sortedRegions.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        locRegionDropdown.appendChild(opt);
+      });
+      
+      if (currentLocRegion && sortedRegions.includes(currentLocRegion)) {
+        locRegionDropdown.value = currentLocRegion;
+      } else {
+        locRegionDropdown.value = 'all';
+      }
+      
+      courRegionDropdown.innerHTML = '<option value="all">Всі філії</option>';
+      sortedRegions.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        courRegionDropdown.appendChild(opt);
+      });
+      
+      if (currentCourRegion && sortedRegions.includes(currentCourRegion)) {
+        courRegionDropdown.value = currentCourRegion;
+      } else {
+        courRegionDropdown.value = 'all';
+      }
+    }
+
+    function renderDbLocations() {
+      const container = document.getElementById('db-locations-list');
+      const searchQuery = document.getElementById('db-locations-search').value.toLowerCase().trim();
+      const filterRegion = document.getElementById('db-locations-filter-region').value;
+      const locations = rawData.locations || [];
+      
+      container.innerHTML = '';
+      
+      const filtered = locations.filter(l => {
+        const matchesSearch = l.name.toLowerCase().includes(searchQuery) || l.address.toLowerCase().includes(searchQuery) || l.location_id.toLowerCase().includes(searchQuery);
+        const lRegion = l.region ? String(l.region).trim() : '';
+        const matchesRegion = filterRegion === 'all' || lRegion === filterRegion;
+        return matchesSearch && matchesRegion;
+      });
+      
+      document.getElementById('db-locations-count').textContent = filtered.length;
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="py-4 text-center text-slate-400 text-sm font-medium">Нічого не знайдено.</div>';
+        return;
+      }
+      
+      filtered.forEach(l => {
+        const isActive = l.active === 'true' || l.active === true;
+        const card = document.createElement('div');
+        card.className = 'p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-sm hover:bg-slate-100/50 transition-colors';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-800">${l.name}</span>
+              <span class="text-xs font-mono text-indigo-655 font-bold">ID: ${l.location_id}</span>
+              ${l.indoor === 'true' || l.indoor === true ? '<span class="bg-indigo-50 text-indigo-655 text-[10px] px-1.5 py-0.2 rounded font-bold border border-indigo-100">indoor</span>' : ''}
+            </div>
+            <p class="text-xs text-slate-505 font-medium mt-1">${l.address}</p>
+            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Координати: ${l.latitude}, ${l.longitude} • Радіус: ${l.radius_m}м • Філія: ${l.region || 'н/д'}</p>
+          </div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full ${isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}">
+            ${isActive ? 'активна' : 'вимкнена'}
+          </span>
+        `;
+        container.appendChild(card);
+      });
+    }
+    
+    function renderDbCouriers() {
+      const container = document.getElementById('db-couriers-list');
+      const searchQuery = document.getElementById('db-couriers-search').value.toLowerCase().trim();
+      const filterRegion = document.getElementById('db-couriers-filter-region').value;
+      const filterStatus = document.getElementById('db-couriers-filter-status').value;
+      const couriers = rawData.couriers || [];
+      const courierStatus = rawData.courierStatus || [];
+      
+      container.innerHTML = '';
+      
+      const liveStatusMap = {};
+      courierStatus.forEach(s => { liveStatusMap[s.courier_id] = s.status; });
+      
+      const filtered = couriers.filter(c => {
+        const matchesSearch = c.name.toLowerCase().includes(searchQuery) || c.courier_id.toLowerCase().includes(searchQuery) || (c.phone || '').includes(searchQuery);
+        const cRegion = c.region ? String(c.region).trim() : '';
+        const matchesRegion = filterRegion === 'all' || cRegion === filterRegion;
+        
+        const currentStatus = liveStatusMap[c.courier_id] || 'ended';
+        const isWorking = currentStatus === 'active';
+        let matchesStatus = true;
+        if (filterStatus === 'active') matchesStatus = isWorking;
+        if (filterStatus === 'ended') matchesStatus = !isWorking;
+        
+        return matchesSearch && matchesRegion && matchesStatus;
+      });
+      
+      document.getElementById('db-couriers-count').textContent = filtered.length;
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="py-4 text-center text-slate-400 text-sm font-medium">Нікого не знайдено.</div>';
+        return;
+      }
+      
+      filtered.forEach(c => {
+        const isActive = c.active === 'true' || c.active === true;
+        const currentStatus = liveStatusMap[c.courier_id] || 'ended';
+        const isWorking = currentStatus === 'active';
+        const card = document.createElement('div');
+        card.className = 'p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-sm hover:bg-slate-100/50 transition-colors';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-slate-800">${c.name}</span>
+              <span class="text-xs font-mono text-indigo-650 font-bold">ID: ${c.courier_id}</span>
+              ${isWorking ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-bold border border-emerald-250">🟢 НА ЗМІНІ</span>' : '<span class="bg-slate-150 text-slate-500 text-[10px] px-1.5 py-0.5 rounded font-medium border border-slate-200">⚪ ПОЗА ЗМІНОЮ</span>'}
+            </div>
+            <p class="text-xs text-slate-550 font-medium mt-1">Тел: ${c.phone || 'н/д'}</p>
+            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Філія: ${c.region || 'Всі'} • Платформа: ${c.platform || 'н/д'}</p>
+          </div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full ${isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}">
+            ${isActive ? 'активний' : 'блок'}
+          </span>
+        `;
+        container.appendChild(card);
+      });
+    }
+</script>
+<?!= include('DashboardFooter'); ?>

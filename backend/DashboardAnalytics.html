@@ -1,0 +1,850 @@
+<?!= include('DashboardHeader'); ?>
+<div id="tab-analytics" class="tab-pane hidden flex flex-col gap-6">
+      
+      <!-- Filter Bar -->
+      <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col md:flex-row gap-4 justify-between items-end">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+          <!-- Date Filter Start -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs text-slate-500 font-bold uppercase tracking-wider">Дата з</label>
+            <input type="date" id="analytics-filter-date-start" onchange="applyAnalyticsFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-800 outline-none focus:border-brand-main focus:bg-white transition-all" />
+          </div>
+          <!-- Date Filter End -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs text-slate-500 font-bold uppercase tracking-wider">Дата по</label>
+            <input type="date" id="analytics-filter-date-end" onchange="applyAnalyticsFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-800 outline-none focus:border-brand-main focus:bg-white transition-all" />
+          </div>
+          <!-- Branch / Region Filter -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs text-slate-500 font-bold uppercase tracking-wider">Філія (Регіон)</label>
+            <select id="analytics-filter-region" onchange="applyAnalyticsFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-main focus:bg-white transition-all">
+              <option value="all">Всі філії</option>
+            </select>
+          </div>
+          <!-- Courier Filter -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs text-slate-500 font-bold uppercase tracking-wider">Кур'єр</label>
+            <select id="analytics-filter-courier" onchange="applyAnalyticsFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-main focus:bg-white transition-all">
+              <option value="all">Всі кур’єри</option>
+            </select>
+          </div>
+        </div>
+        <!-- Reset Button -->
+        <button onclick="resetAnalyticsFilters()" class="bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all h-[42px] whitespace-nowrap">
+          Скинути фільтри
+        </button>
+      </div>
+      <!-- Scorecards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Загальна кількість візитів</p>
+          <p id="stat-total-visits" class="text-3xl font-bold text-slate-800">0</p>
+        </div>
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Середній час на точці</p>
+          <p id="stat-avg-duration" class="text-3xl font-bold text-indigo-600">0 <span class="text-sm font-normal text-slate-500">хв</span></p>
+        </div>
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Автоматичні чек-іни</p>
+          <p id="stat-auto-visits" class="text-3xl font-bold text-emerald-600">0%</p>
+        </div>
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm">
+          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Активні локації сьогодні</p>
+          <p id="stat-visited-locations" class="text-3xl font-bold text-cyan-600">0 / 0</p>
+        </div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chart 1: Visits per day -->
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col">
+          <h3 class="font-bold text-slate-700 text-sm mb-4">Графік візитів за днями</h3>
+          <div class="h-[250px] relative">
+            <canvas id="chart-visits-days"></canvas>
+          </div>
+        </div>
+        <!-- Chart 2: Visits per courier -->
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col">
+          <h3 class="font-bold text-slate-700 text-sm mb-4">Візити за кур’єрами</h3>
+          <div class="h-[250px] relative">
+            <canvas id="chart-visits-couriers"></canvas>
+          </div>
+        </div>
+        <!-- Chart 3: Visit source ratio -->
+        <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col">
+          <h3 class="font-bold text-slate-700 text-sm mb-4">Джерело реєстрації візиту</h3>
+          <div class="h-[250px] relative">
+            <canvas id="chart-visits-source"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Courier Track Map -->
+      <div id="analytics-map-container" class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col gap-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 class="font-bold text-slate-800 text-sm">Маршрут переміщення кур’єра</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Послідовність відвідування точок за обраний період</p>
+          </div>
+          <span id="analytics-map-status" class="bg-slate-100 text-slate-600 text-xs px-3 py-1 rounded-full font-medium">
+            Оберіть конкретного кур’єра у фільтрах для побудови треку
+          </span>
+        </div>
+        <div id="analytics-track-map" class="w-full h-[350px] rounded-xl overflow-hidden border border-slate-200 z-10"></div>
+      </div>
+
+      <!-- Visits Table -->
+      <div class="bg-brand-card border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/20">
+          <h3 class="font-bold text-slate-800">Реєстр візитів</h3>
+          <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+            <select id="visits-filter-courier" onchange="renderVisitsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі кур’єри</option>
+            </select>
+            <select id="visits-filter-location" onchange="renderVisitsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі локації</option>
+            </select>
+            <select id="visits-filter-source" onchange="renderVisitsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі джерела</option>
+              <option value="auto">Автоматично (GPS)</option>
+              <option value="manual">Ручний чек-ін</option>
+              <option value="manual_no_gps">Ручний без GPS</option>
+            </select>
+            <input id="visits-search" type="text" placeholder="Пошук по адресу..." oninput="renderVisitsTable()" class="w-full md:w-60 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs text-slate-800 outline-none focus:border-brand-main focus:bg-white transition-all" />
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-650 font-bold">
+              <tr>
+                <th class="px-6 py-4">Кур’єр</th>
+                <th class="px-6 py-4">Локація</th>
+                <th class="px-6 py-4">Адреса</th>
+                <th class="px-6 py-4">Вхід</th>
+                <th class="px-6 py-4">Вихід</th>
+                <th class="px-6 py-4">Час перебування</th>
+                <th class="px-6 py-4">Точність GPS</th>
+                <th class="px-6 py-4">Спосіб</th>
+              </tr>
+            </thead>
+            <tbody id="visits-table-body" class="divide-y divide-slate-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+        <div id="visits-empty" class="hidden py-8 text-center text-slate-500">Нічого не знайдено за даними фільтрами.</div>
+      </div>
+    </div>
+<script>
+  let activeTab = 'analytics';
+  let charts = {};
+  let analyticsTrackMap = null;
+  let analyticsTrackLayers = [];
+
+  function switchTab(tabId) {
+    activeTab = tabId;
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+    const pane = document.getElementById('tab-' + tabId);
+    if (pane) pane.classList.remove('hidden');
+    renderCurrentTab();
+  }
+
+  function renderCurrentTab(isBackground = false) {
+    if (!rawData) return;
+    if (activeTab === 'analytics') {
+      populateAnalyticsFilters();
+      renderAnalyticsScorecards();
+      renderAnalyticsCharts();
+      renderVisitsTable();
+      setTimeout(initAnalyticsMap, 150);
+    }
+  }
+
+  // Helper to get filtered visits
+    
+    function getFilteredStops() {
+      if (!rawData || !rawData.stops) return [];
+      const regionDropdown = document.getElementById('analytics-filter-region');
+      const courierDropdown = document.getElementById('analytics-filter-courier');
+      const dateStartInput = document.getElementById('analytics-filter-date-start');
+      const dateEndInput = document.getElementById('analytics-filter-date-end');
+      
+      const region = regionDropdown ? regionDropdown.value : 'all';
+      const courier = courierDropdown ? courierDropdown.value : 'all';
+      const dateStart = dateStartInput ? dateStartInput.value : '';
+      const dateEnd = dateEndInput ? dateEndInput.value : '';
+      
+      const stops = rawData.stops || [];
+      const courierMap = {};
+      (rawData.couriers || []).forEach(function(c) { courierMap[c.courier_id] = c; });
+      
+      return stops.filter(function(s) {
+        const cObj = courierMap[s.courier_id];
+        const matchesRegion = region === 'all' || (cObj && String(cObj.region || '').trim() === region);
+        const matchesCourier = courier === 'all' || s.courier_id === courier;
+        
+        let matchesDate = true;
+        if (s.start_time) {
+          const d = new Date(s.start_time);
+          if (!isNaN(d.getTime())) {
+            if (dateStart) {
+              const ds = new Date(dateStart);
+              ds.setHours(0,0,0,0);
+              if (d < ds) matchesDate = false;
+            }
+            if (dateEnd) {
+              const de = new Date(dateEnd);
+              de.setHours(23,59,59,999);
+              if (d > de) matchesDate = false;
+            }
+          }
+        }
+        return matchesRegion && matchesCourier && matchesDate;
+      });
+    }
+function getFilteredVisits() {
+      if (!rawData) return [];
+      const visits = rawData.visits || [];
+      const couriers = rawData.couriers || [];
+      const locations = rawData.locations || [];
+      
+      const courierMap = {};
+      couriers.forEach(c => { courierMap[c.courier_id] = c; });
+      const locationMap = {};
+      locations.forEach(l => { locationMap[l.location_id] = l; });
+      
+      const filterDateStart = document.getElementById('analytics-filter-date-start').value;
+      const filterDateEnd = document.getElementById('analytics-filter-date-end').value;
+      const filterRegion = document.getElementById('analytics-filter-region').value;
+      const filterCourier = document.getElementById('analytics-filter-courier').value;
+      
+      return visits.filter(v => {
+        // 1. Date filter
+        if (v.enter_time) {
+          const enterDate = v.enter_time.split('T')[0];
+          if (filterDateStart && enterDate < filterDateStart) return false;
+          if (filterDateEnd && enterDate > filterDateEnd) return false;
+        } else {
+          if (filterDateStart || filterDateEnd) return false;
+        }
+        
+        // 2. Region / Branch Filter
+        if (filterRegion !== 'all') {
+          const loc = locationMap[v.location_id];
+          const locRegion = loc && loc.region ? String(loc.region).trim() : '';
+          
+          const cour = courierMap[v.courier_id];
+          const courRegion = cour && cour.region ? String(cour.region).trim() : '';
+          
+          if (locRegion !== filterRegion && courRegion !== filterRegion) {
+            return false;
+          }
+        }
+        
+        // 3. Courier Filter
+        if (filterCourier !== 'all' && v.courier_id !== filterCourier) {
+          return false;
+        }
+        
+        return true;
+      });
+    }
+
+    // Populate dropdown lists for regions and couriers
+    function populateAnalyticsFilters() {
+      if (!rawData) return;
+      
+      const regionDropdown = document.getElementById('analytics-filter-region');
+      const courierDropdown = document.getElementById('analytics-filter-courier');
+      
+      if (!regionDropdown || !courierDropdown) return;
+      
+      const currentRegion = regionDropdown.value;
+      const currentCourier = courierDropdown.value;
+      
+      // 1. Populate Regions
+      const locations = rawData.locations || [];
+      const couriers = rawData.couriers || [];
+      const regionsSet = new Set();
+      locations.forEach(l => { if (l.region) regionsSet.add(String(l.region).trim()); });
+      couriers.forEach(c => { if (c.region) regionsSet.add(String(c.region).trim()); });
+      
+      regionDropdown.innerHTML = '<option value="all">Всі філії</option>';
+      Array.from(regionsSet).sort().forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        regionDropdown.appendChild(opt);
+      });
+      
+      if (currentRegion && Array.from(regionsSet).includes(currentRegion)) {
+        regionDropdown.value = currentRegion;
+      } else {
+        regionDropdown.value = 'all';
+      }
+      
+      // 2. Populate Couriers
+      courierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
+      couriers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.courier_id;
+        opt.textContent = c.name + " (" + c.courier_id + ")";
+        courierDropdown.appendChild(opt);
+      });
+      
+      if (currentCourier && couriers.some(c => c.courier_id === currentCourier)) {
+        courierDropdown.value = currentCourier;
+      } else {
+        courierDropdown.value = 'all';
+      }
+
+      // 3. Populate Visits Table specific Courier Filter
+      const tableCourierDropdown = document.getElementById('visits-filter-courier');
+      if (tableCourierDropdown) {
+        const currentTableCourier = tableCourierDropdown.value;
+        tableCourierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
+        couriers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.courier_id;
+          opt.textContent = c.name;
+          tableCourierDropdown.appendChild(opt);
+        });
+        if (currentTableCourier && couriers.some(c => c.courier_id === currentTableCourier)) {
+          tableCourierDropdown.value = currentTableCourier;
+        } else {
+          tableCourierDropdown.value = 'all';
+        }
+      }
+
+      // 4. Populate Visits Table specific Location Filter
+      const tableLocationDropdown = document.getElementById('visits-filter-location');
+      if (tableLocationDropdown) {
+        const currentTableLocation = tableLocationDropdown.value;
+        tableLocationDropdown.innerHTML = '<option value="all">Всі локації</option>';
+        locations.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(l => {
+          const opt = document.createElement('option');
+          opt.value = l.location_id;
+          opt.textContent = l.name;
+          tableLocationDropdown.appendChild(opt);
+        });
+        if (currentTableLocation && locations.some(l => l.location_id === currentTableLocation)) {
+          tableLocationDropdown.value = currentTableLocation;
+        } else {
+          tableLocationDropdown.value = 'all';
+        }
+      }
+    }
+
+    // Triggered when filters change
+    function applyAnalyticsFilters() {
+      renderAnalyticsScorecards();
+      renderAnalyticsCharts();
+      renderVisitsTable();
+      renderAnalyticsMap();
+    }
+    
+    // Clear all filters
+    function resetAnalyticsFilters() {
+      document.getElementById('analytics-filter-date-start').value = '';
+      document.getElementById('analytics-filter-date-end').value = '';
+      document.getElementById('analytics-filter-region').value = 'all';
+      document.getElementById('analytics-filter-courier').value = 'all';
+      applyAnalyticsFilters();
+    }
+
+    // Initialize analytics route map
+    function initAnalyticsMap() {
+      const mapContainer = document.getElementById('analytics-track-map');
+      if (!mapContainer) return;
+      
+      if (!analyticsTrackMap) {
+        analyticsTrackMap = L.map('analytics-track-map').setView([50.4501, 30.5234], 11);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          subdomains: 'abcd',
+          maxZoom: 20
+        }).addTo(analyticsTrackMap);
+      }
+      
+      // Trigger size recalculation in case Leaflet container was hidden during creation
+      setTimeout(() => {
+        if (analyticsTrackMap) analyticsTrackMap.invalidateSize();
+      }, 50);
+      
+      renderAnalyticsMap();
+    }
+
+    // Render track on map
+    function renderAnalyticsMap() {
+      if (!rawData || !analyticsTrackMap) return;
+      
+      // Clear previous layers
+      analyticsTrackLayers.forEach(function(l) { analyticsTrackMap.removeLayer(l); });
+      analyticsTrackLayers = [];
+      
+      const visits = getFilteredVisits();
+      const stops = getFilteredStops();
+      const locations = rawData.locations || [];
+      const locationMap = {};
+      locations.forEach(function(l) { locationMap[l.location_id] = l; });
+      
+      const selectedCourierId = document.getElementById('analytics-filter-courier').value;
+      const statusText = document.getElementById('analytics-map-status');
+      
+      if (selectedCourierId === 'all') {
+        statusText.textContent = 'Оберіть конкретного кур’єра у фільтрах для побудови треку';
+        statusText.className = 'bg-slate-100 text-slate-650 text-xs px-3 py-1 rounded-full font-medium';
+        
+        // Plot all filtered visits as small grey dots
+        const coords = [];
+        visits.forEach(function(v) {
+          const loc = locationMap[v.location_id];
+          if (loc) {
+            const lat = parseFloat(loc.latitude);
+            const lng = parseFloat(loc.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              const dot = L.circleMarker([lat, lng], {
+                radius: 4,
+                fillColor: '#94a3b8',
+                color: '#ffffff',
+                weight: 1,
+                fillOpacity: 0.6
+              }).addTo(analyticsTrackMap);
+              
+              const timeStr = v.enter_time ? new Date(v.enter_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : '';
+              dot.bindPopup('<b>' + loc.name + '</b><br>Час входу: ' + timeStr);
+              analyticsTrackLayers.push(dot);
+              coords.push([lat, lng]);
+            }
+          }
+        });
+        
+        // Plot all filtered stops as orange dots
+        stops.forEach(function(s) {
+          const lat = parseFloat(s.anchor_lat);
+          const lng = parseFloat(s.anchor_lng);
+          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            const dot = L.circleMarker([lat, lng], {
+              radius: 4,
+              fillColor: '#f97316',
+              color: '#ffffff',
+              weight: 1,
+              fillOpacity: 0.8
+            }).addTo(analyticsTrackMap);
+            
+            const timeStr = s.start_time ? new Date(s.start_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : '';
+            const duration = s.duration_minutes ? s.duration_minutes + ' хв' : '';
+            dot.bindPopup('<b>Зупинка</b><br>Початок: ' + timeStr + '<br>Тривалість: ' + duration);
+            analyticsTrackLayers.push(dot);
+            coords.push([lat, lng]);
+          }
+        });
+        
+        if (coords.length > 0) {
+          analyticsTrackMap.fitBounds(coords, { padding: [30, 30], maxZoom: 13 });
+        }
+        return;
+      }
+      
+      // Filter visits and stops for the chosen courier
+      const courierVisits = visits.filter(function(v) { return v.courier_id === selectedCourierId; });
+      const courierStops = stops.filter(function(s) { return s.courier_id === selectedCourierId; });
+      
+      const combinedEvents = [];
+      courierVisits.forEach(function(v) { combinedEvents.push({ type: 'visit', data: v, time: new Date(v.enter_time) }); });
+      courierStops.forEach(function(s) { combinedEvents.push({ type: 'stop', data: s, time: new Date(s.start_time) }); });
+      
+      combinedEvents.sort(function(a, b) { return a.time - b.time; });
+      
+      const pathCoords = [];
+      let visitIndex = 0;
+      
+      combinedEvents.forEach(function(ev) {
+        if (ev.type === 'visit') {
+          const v = ev.data;
+          const loc = locationMap[v.location_id];
+          if (loc) {
+            const lat = parseFloat(loc.latitude);
+            const lng = parseFloat(loc.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              const point = [lat, lng];
+              pathCoords.push(point);
+              visitIndex++;
+              
+              const enterStr = v.enter_time ? new Date(v.enter_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : 'н/д';
+              const exitStr = v.exit_time ? new Date(v.exit_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : 'н/д';
+              
+              const numIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div class="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center border-2 border-white shadow-md text-xs">' + visitIndex + '</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+              });
+              
+              const marker = L.marker(point, { icon: numIcon }).addTo(analyticsTrackMap);
+              const popupContent = '<div class="text-xs space-y-1 p-0.5">' +
+                '<div class="font-bold text-slate-800 text-sm">#' + visitIndex + ' ' + loc.name + '</div>' +
+                '<div class="text-slate-500">Адреса: <span class="font-semibold text-slate-700">' + loc.address + '</span></div>' +
+                '<div class="text-slate-500">Вхід: <span class="font-semibold text-emerald-600">' + enterStr + '</span></div>' +
+                '<div class="text-slate-500">Вихід: <span class="font-semibold text-rose-600">' + exitStr + '</span></div>' +
+                '<div class="text-slate-500">Перебування: <span class="font-semibold text-slate-700">' + (v.duration_seconds ? Math.round(v.duration_seconds/60) + ' хв' : 'н/д') + '</span></div>' +
+              '</div>';
+              marker.bindPopup(popupContent);
+              analyticsTrackLayers.push(marker);
+            }
+          }
+        } else if (ev.type === 'stop') {
+          const s = ev.data;
+          const lat = parseFloat(s.anchor_lat);
+          const lng = parseFloat(s.anchor_lng);
+          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            const point = [lat, lng];
+            pathCoords.push(point);
+            
+            const startStr = s.start_time ? new Date(s.start_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : 'н/д';
+            const endStr = s.end_time ? new Date(s.end_time).toLocaleTimeString('uk-UA', {hour: '2-digit', minute:'2-digit'}) : 'н/д';
+            
+            const stopIcon = L.divIcon({
+              className: 'custom-div-icon',
+              html: '<div class="w-4 h-4 bg-orange-500 rounded border border-white shadow text-[10px] text-white flex items-center justify-center font-bold">Z</div>',
+              iconSize: [16, 16],
+              iconAnchor: [8, 8]
+            });
+            
+            const marker = L.marker(point, { icon: stopIcon }).addTo(analyticsTrackMap);
+            const popupContent = '<div class="text-xs space-y-1 p-0.5">' +
+              '<div class="font-bold text-slate-800 text-sm text-orange-600">Зупинка</div>' +
+              '<div class="text-slate-500">Початок: <span class="font-semibold text-slate-700">' + startStr + '</span></div>' +
+              '<div class="text-slate-500">Кінець: <span class="font-semibold text-slate-700">' + endStr + '</span></div>' +
+              '<div class="text-slate-500">Тривалість: <span class="font-semibold text-slate-700">' + (s.duration_minutes ? s.duration_minutes + ' хв' : 'н/д') + '</span></div>' +
+            '</div>';
+            marker.bindPopup(popupContent);
+            analyticsTrackLayers.push(marker);
+          }
+        }
+      });
+      
+      if (pathCoords.length > 1) {
+        const polyline = L.polyline(pathCoords, {
+          color: '#6366f1',
+          weight: 4,
+          opacity: 0.8,
+          dashArray: '5, 8'
+        }).addTo(analyticsTrackMap);
+        analyticsTrackLayers.push(polyline);
+        
+        statusText.textContent = 'Маршрут побудовано: ' + pathCoords.length + ' зупинок/візитів';
+        statusText.className = 'bg-indigo-50 text-indigo-700 text-xs px-3 py-1 rounded-full font-bold';
+        analyticsTrackMap.fitBounds(pathCoords, { padding: [40, 40], maxZoom: 15 });
+      } else if (pathCoords.length === 1) {
+        statusText.textContent = 'Тільки 1 точка в маршруті';
+        statusText.className = 'bg-cyan-50 text-cyan-700 text-xs px-3 py-1 rounded-full font-bold';
+        analyticsTrackMap.setView(pathCoords[0], 15);
+      } else {
+        statusText.textContent = 'Немає візитів та зупинок за вказаний період';
+        statusText.className = 'bg-rose-50 text-rose-700 text-xs px-3 py-1 rounded-full font-bold';
+      }
+    }
+
+    // ==================== TABS RENDERING: ANALYTICS ====================
+    
+    function renderAnalyticsScorecards() {
+      const visits = getFilteredVisits();
+      const locations = rawData.locations || [];
+      
+      // Total visits
+      document.getElementById('stat-total-visits').textContent = visits.length;
+      
+      // Average duration
+      let totalDurationSec = 0;
+      let validDurationsCount = 0;
+      let autoCount = 0;
+      const uniqueVisitedLocs = {};
+      
+      visits.forEach(v => {
+        const sec = parseFloat(v.duration_seconds);
+        if (!isNaN(sec) && sec > 0) {
+          totalDurationSec += sec;
+          validDurationsCount++;
+        }
+        if (v.source === 'auto') {
+          autoCount++;
+        }
+        uniqueVisitedLocs[v.location_id] = true;
+      });
+      
+      const avgMin = validDurationsCount > 0 ? Math.round((totalDurationSec / validDurationsCount) / 60) : 0;
+      document.getElementById('stat-avg-duration').innerHTML = `${avgMin} <span class="text-sm font-normal text-slate-500">хв</span>`;
+      
+      // Auto-checkin %
+      const autoPercent = visits.length > 0 ? Math.round((autoCount / visits.length) * 100) : 0;
+      document.getElementById('stat-auto-visits').textContent = `${autoPercent}%`;
+      
+      // Visited locations vs total
+      const activeLocs = locations.filter(l => l.active !== 'false');
+      const visitedCount = Object.keys(uniqueVisitedLocs).length;
+      document.getElementById('stat-visited-locations').textContent = `${visitedCount} / ${activeLocs.length}`;
+    }
+    
+    function renderAnalyticsCharts() {
+      const visits = getFilteredVisits();
+      const couriers = rawData.couriers || [];
+      
+      // Destroy previous charts to re-render
+      if (charts.visitsDays) charts.visitsDays.destroy();
+      if (charts.visitsCouriers) charts.visitsCouriers.destroy();
+      if (charts.visitsSource) charts.visitsSource.destroy();
+      
+      // --- Chart 1: Visits per Day ---
+      const visitsByDay = {};
+      visits.forEach(v => {
+        if (v.enter_time) {
+          const dateStr = v.enter_time.split('T')[0];
+          visitsByDay[dateStr] = (visitsByDay[dateStr] || 0) + 1;
+        }
+      });
+      
+      const sortedDays = Object.keys(visitsByDay).sort();
+      const dayData = sortedDays.map(d => visitsByDay[d]);
+      
+      const ctx1 = document.getElementById('chart-visits-days').getContext('2d');
+      charts.visitsDays = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels: sortedDays.map(d => formatDateLabel(d)),
+          datasets: [{
+            label: 'Кількість візитів',
+            data: dayData,
+            borderColor: '#4f46e5',
+            backgroundColor: 'rgba(79, 70, 229, 0.05)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(15,23,42,0.06)' }, ticks: { color: '#64748b', stepSize: 1 } },
+            x: { grid: { display: false }, ticks: { color: '#64748b' } }
+          }
+        }
+      });
+      
+      // --- Chart 2: Visits per Courier ---
+      const courierNames = {};
+      couriers.forEach(c => {
+        courierNames[c.courier_id] = c.name;
+      });
+      
+      const visitsByCourier = {};
+      visits.forEach(v => {
+        const name = courierNames[v.courier_id] || v.courier_id;
+        visitsByCourier[name] = (visitsByCourier[name] || 0) + 1;
+      });
+      
+      const courierLabels = Object.keys(visitsByCourier);
+      const courierData = courierLabels.map(l => visitsByCourier[l]);
+      
+      const ctx2 = document.getElementById('chart-visits-couriers').getContext('2d');
+      charts.visitsCouriers = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: courierLabels,
+          datasets: [{
+            data: courierData,
+            backgroundColor: 'rgba(6, 182, 212, 0.7)',
+            borderColor: '#06b6d4',
+            borderWidth: 1,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(15,23,42,0.06)' }, ticks: { color: '#64748b', stepSize: 1 } },
+            x: { grid: { display: false }, ticks: { color: '#64748b' } }
+          }
+        }
+      });
+      
+      // --- Chart 3: Visit Sources ---
+      let autoCount = 0;
+      let manualCount = 0;
+      let manualNoGpsCount = 0;
+      
+      visits.forEach(v => {
+        if (v.source === 'auto') autoCount++;
+        else if (v.source === 'manual') manualCount++;
+        else if (v.source === 'manual_no_gps') manualNoGpsCount++;
+      });
+      
+      const ctx3 = document.getElementById('chart-visits-source').getContext('2d');
+      charts.visitsSource = new Chart(ctx3, {
+        type: 'doughnut',
+        data: {
+          labels: ['GPS Автомат', 'Ручний чек-ін', 'Ручний без GPS'],
+          datasets: [{
+            data: [autoCount, manualCount, manualNoGpsCount],
+            backgroundColor: [
+              'rgba(16, 185, 129, 0.75)',
+              'rgba(245, 158, 11, 0.75)',
+              'rgba(239, 68, 68, 0.75)'
+            ],
+            borderColor: ['#10b981', '#f59e0b', '#ef4444'],
+            borderWidth: 1.5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#64748b', boxWidth: 12, font: { size: 11, weight: 'bold' } }
+            }
+          }
+        }
+      });
+    }
+    
+    function renderVisitsTable() {
+      const tbody = document.getElementById('visits-table-body');
+      const emptyDiv = document.getElementById('visits-empty');
+      const searchQuery = document.getElementById('visits-search').value.toLowerCase().trim();
+      const filterSource = document.getElementById('visits-filter-source').value;
+      const filterCourier = document.getElementById('visits-filter-courier').value;
+      const filterLocation = document.getElementById('visits-filter-location').value;
+      
+      const visits = getFilteredVisits();
+      const stops = getFilteredStops();
+      const couriers = rawData.couriers || [];
+      const locations = rawData.locations || [];
+      
+      tbody.innerHTML = '';
+      
+      const courierMap = {};
+      couriers.forEach(function(c) { courierMap[c.courier_id] = c.name; });
+      const locationMap = {};
+      locations.forEach(function(l) { locationMap[l.location_id] = l; });
+      
+      const filteredVisits = visits.filter(function(v) {
+        const cName = (courierMap[v.courier_id] || v.courier_id).toLowerCase();
+        const lObj = locationMap[v.location_id] || {};
+        const lName = (lObj.name || v.location_id).toLowerCase();
+        const lAddr = (lObj.address || '').toLowerCase();
+        
+        const matchesSearch = cName.includes(searchQuery) || lName.includes(searchQuery) || lAddr.includes(searchQuery);
+        const matchesSource = filterSource === 'all' || v.source === filterSource;
+        const matchesCourier = filterCourier === 'all' || v.courier_id === filterCourier;
+        const matchesLocation = filterLocation === 'all' || v.location_id === filterLocation;
+        
+        return matchesSearch && matchesSource && matchesCourier && matchesLocation;
+      });
+      
+      const filteredStops = stops.filter(function(s) {
+        const cName = (courierMap[s.courier_id] || s.courier_id).toLowerCase();
+        const matchesSearch = searchQuery === '' || cName.includes(searchQuery) || 'зупинка'.includes(searchQuery);
+        const matchesSource = filterSource === 'all';
+        const matchesCourier = filterCourier === 'all' || s.courier_id === filterCourier;
+        const matchesLocation = filterLocation === 'all';
+        
+        return matchesSearch && matchesSource && matchesCourier && matchesLocation;
+      });
+      
+      const combinedEvents = [];
+      filteredVisits.forEach(function(v) { combinedEvents.push({ type: 'visit', data: v, time: new Date(v.enter_time) }); });
+      filteredStops.forEach(function(s) { combinedEvents.push({ type: 'stop', data: s, time: new Date(s.start_time) }); });
+      
+      if (combinedEvents.length === 0) {
+        emptyDiv.classList.remove('hidden');
+        return;
+      }
+      emptyDiv.classList.add('hidden');
+      
+      // Sort newest first
+      combinedEvents.sort(function(a, b) { return b.time - a.time; });
+      
+      combinedEvents.forEach(function(ev) {
+        if (ev.type === 'visit') {
+          const v = ev.data;
+          const cName = courierMap[v.courier_id] || v.courier_id;
+          const lObj = locationMap[v.location_id] || { name: v.location_id, address: 'н/д' };
+          
+          const durationSec = parseInt(v.duration_seconds);
+          let durationText = 'н/д';
+          if (!isNaN(durationSec)) {
+            if (durationSec < 60) durationText = durationSec + ' с';
+            else {
+              const min = Math.floor(durationSec / 60);
+              const sec = durationSec % 60;
+              durationText = min + ' хв ' + sec + ' с';
+            }
+          }
+          
+          let sourceBadge = '';
+          if (v.source === 'auto') {
+            sourceBadge = '<span class="bg-emerald-55 text-emerald-700 text-xs px-2 py-0.5 rounded font-bold border border-emerald-105">Auto (GPS)</span>';
+          } else if (v.source === 'manual') {
+            sourceBadge = '<span class="bg-amber-50 text-amber-700 text-xs px-2 py-0.5 rounded font-bold border border-amber-100">Ручний</span>';
+          } else {
+            sourceBadge = '<span class="bg-red-55 text-red-700 text-xs px-2 py-0.5 rounded font-bold border border-red-105">Без GPS</span>';
+          }
+          
+          const row = document.createElement('tr');
+          row.className = 'hover:bg-slate-50 transition-colors';
+          row.innerHTML =
+            '<td class="px-6 py-3.5 font-bold text-slate-800">' + cName + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-700 font-semibold">' + lObj.name + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-500 text-xs">' + lObj.address + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-600 text-xs font-medium">' + formatDateStr(v.enter_time) + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-600 text-xs font-medium">' + formatDateStr(v.exit_time) + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-800 font-mono text-xs font-semibold">' + durationText + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-500 text-xs font-medium">' + (v.accuracy_m ? v.accuracy_m + ' м' : 'н/д') + '</td>' +
+            '<td class="px-6 py-3.5">' + sourceBadge + '</td>';
+          tbody.appendChild(row);
+        } else if (ev.type === 'stop') {
+          const s = ev.data;
+          const cName = courierMap[s.courier_id] || s.courier_id;
+          
+          const durationMin = parseInt(s.duration_minutes);
+          let durationText = 'н/д';
+          if (!isNaN(durationMin)) {
+            durationText = durationMin + ' хв';
+          }
+          
+          const sourceBadge = '<span class="bg-orange-50 text-orange-700 text-xs px-2 py-0.5 rounded font-bold border border-orange-200">Зупинка</span>';
+          const coordsText = (s.anchor_lat && s.anchor_lng) 
+            ? '<a href="https://www.google.com/maps?q=' + s.anchor_lat + ',' + s.anchor_lng + '" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 font-semibold">' + parseFloat(s.anchor_lat).toFixed(5) + ', ' + parseFloat(s.anchor_lng).toFixed(5) + ' ↗</a>' 
+            : 'н/д';
+          
+          const row = document.createElement('tr');
+          row.className = 'hover:bg-orange-50/50 transition-colors bg-orange-50/20';
+          row.innerHTML =
+            '<td class="px-6 py-3.5 font-bold text-slate-800">' + cName + '</td>' +
+            '<td class="px-6 py-3.5 text-orange-700 font-semibold flex items-center gap-1.5"><div class="w-2 h-2 bg-orange-500 rounded-full"></div>Зупинка</td>' +
+            '<td class="px-6 py-3.5 text-slate-500 text-xs font-mono">' + coordsText + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-600 text-xs font-medium">' + formatDateStr(s.start_time) + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-600 text-xs font-medium">' + formatDateStr(s.end_time) + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-800 font-mono text-xs font-semibold">' + durationText + '</td>' +
+            '<td class="px-6 py-3.5 text-slate-500 text-xs font-medium">-</td>' +
+            '<td class="px-6 py-3.5">' + sourceBadge + '</td>';
+          tbody.appendChild(row);
+        }
+      });
+    }
+  
+    function formatDateLabel(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+    }
+    
+</script>
+<?!= include('DashboardFooter'); ?>

@@ -50,7 +50,7 @@ function setupDatabase() {
   ]);
   
   setupSheet(ss, "CourierStatus", [
-    "courier_id", "name", "last_seen", "latitude", "longitude", "accuracy_m", "battery_percent", "status", "map_link", "location_request"
+    "courier_id", "name", "last_seen", "latitude", "longitude", "accuracy_m", "battery_percent", "status", "map_link", "location_request", "idle_since"
   ]);
   
   // 2. Заповнення налаштувань за замовчуванням (якщо порожньо)

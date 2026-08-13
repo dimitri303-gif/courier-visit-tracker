@@ -1,0 +1,63 @@
+<?!= include('DashboardHeader'); ?>
+
+<!-- Tab Panes (Hash-based navigation on the same page) -->
+
+<!-- Example Tab 1 -->
+<div id="tab-example1" class="tab-pane hidden flex-1 flex flex-col lg:flex-row gap-6 min-h-[600px]">
+  <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm w-full">
+    <h3 class="font-bold text-slate-800 text-lg mb-4">Вміст вкладки 1</h3>
+    <p class="text-slate-500 text-sm">Тут можна розмістити ваш контент, графіки або таблиці.</p>
+  </div>
+</div>
+
+<!-- Example Tab 2 -->
+<div id="tab-example2" class="tab-pane hidden flex-1 flex flex-col lg:flex-row gap-6 min-h-[600px]">
+  <div class="bg-brand-card border border-slate-200 p-5 rounded-2xl shadow-sm w-full">
+    <h3 class="font-bold text-slate-800 text-lg mb-4">Вміст вкладки 2</h3>
+    <p class="text-slate-500 text-sm">Тут можна розмістити ваш контент, графіки або таблиці.</p>
+  </div>
+</div>
+
+<!-- Сторінковий JS-код -->
+<script>
+  // За замовчуванням активна перша вкладка
+  let activeTab = 'example1';
+
+  /**
+   * Викликається глобально при зміні хешу URL або при кліку на локальну навігацію.
+   * Тут ми скриваємо всі `.tab-pane` і показуємо обраний.
+   */
+  function switchTab(tabId) {
+    activeTab = tabId;
+    
+    // Ховаємо всі вкладки на цій сторінці
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+    
+    // Показуємо активну
+    const pane = document.getElementById('tab-' + tabId);
+    if (pane) pane.classList.remove('hidden');
+    
+    // Оновлюємо дані
+    renderCurrentTab();
+  }
+
+  /**
+   * Викликається щоразу після завантаження даних (rawData) з Google Sheets, 
+   * або після перемикання вкладки.
+   */
+  function renderCurrentTab(isBackground = false) {
+    if (!rawData) return;
+    
+    // Якщо активна певна вкладка — викликаємо відповідну функцію рендеру
+    if (activeTab === 'example1') {
+      // renderExample1();
+    } else if (activeTab === 'example2') {
+      // renderExample2();
+    }
+  }
+  
+  // Додайте ваші функції рендеру тут
+  
+</script>
+
+<?!= include('DashboardFooter'); ?>

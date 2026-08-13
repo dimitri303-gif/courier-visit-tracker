@@ -1,0 +1,128 @@
+
+    </main>
+    
+    <!-- Footer -->
+    <footer class="mt-auto px-6 py-4 text-center text-xs text-slate-500 border-t border-slate-200 bg-slate-50">
+      <p>&copy; 2026 Courier Visit Tracker. Усі права захищені.</p>
+    </footer>
+  </div>
+  
+  <script>
+    // Global state
+    let rawData = null;
+    let countdown = 60;
+    let refreshInterval = null;
+    let isPaused = false;
+    let serverTimeout = null;
+    currentPage = '<?= currentPage ?>';
+    
+    function handleHashChange() {
+      const hash = window.location.hash.replace('#', '') || (currentPage === 'maps' ? 'map' : currentPage === 'analytics' ? 'analytics' : 'shifts');
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('local-active'));
+      const activeNav = document.getElementById('nav-' + hash);
+      if (activeNav) activeNav.classList.add('local-active');
+      if (typeof switchTab === 'function') switchTab(hash);
+    }
+    
+    window.addEventListener('hashchange', handleHashChange);
+    
+    function globalOnDataLoaded() {
+      if (typeof renderCurrentTab === 'function') renderCurrentTab(false);
+      handleHashChange();
+    }
+    
+    function togglePauseRefresh() {
+      isPaused = !isPaused;
+      const btn = document.getElementById('pause-btn');
+      const statusText = document.getElementById('auto-refresh-text');
+      if (isPaused) {
+        btn.innerHTML = '<span>▶️</span> Продовжити';
+        btn.classList.add('bg-indigo-50', 'text-indigo-700', 'border-indigo-200');
+        statusText.textContent = 'Оновлення зупинено';
+      } else {
+        btn.innerHTML = '<span>⏸️</span> Пауза';
+        btn.classList.remove('bg-indigo-50', 'text-indigo-700', 'border-indigo-200');
+        countdown = 60;
+        statusText.textContent = `Оновлення через ${countdown}с`;
+      }
+    }
+    
+    function showErrorAlert(msg) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.add('hidden');
+      document.getElementById('error').classList.remove('hidden');
+      document.getElementById('error-message').textContent = msg;
+      document.getElementById('refresh-icon').classList.remove('animate-spin');
+      document.getElementById('refresh-btn').disabled = false;
+    }
+    
+    function loadData(isBackground = false) {
+      if (!isBackground) {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('content').classList.add('hidden');
+        document.getElementById('error').classList.add('hidden');
+      }
+      document.getElementById('refresh-icon').classList.add('animate-spin');
+      document.getElementById('refresh-btn').disabled = true;
+
+      if (serverTimeout) clearTimeout(serverTimeout);
+      serverTimeout = setTimeout(() => {
+        if (!isBackground) showErrorAlert("Запит до сервера виконується довше ніж зазвичай (більше 10 секунд).");
+      }, 10000);
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (serverTimeout) clearTimeout(serverTimeout);
+          if (response && response.success === false) {
+            showErrorAlert(response.error || "Невідома помилка на сервері.");
+            return;
+          }
+          rawData = response.data || response;
+          document.getElementById('loading').classList.add('hidden');
+          document.getElementById('content').classList.remove('hidden');
+          document.getElementById('refresh-icon').classList.remove('animate-spin');
+          document.getElementById('refresh-btn').disabled = false;
+          countdown = 60;
+          globalOnDataLoaded();
+        })
+        .withFailureHandler(function(err) {
+          if (serverTimeout) clearTimeout(serverTimeout);
+          showErrorAlert(err ? (err.message || err.toString()) : "Невідома помилка зв’язку з сервером.");
+        })
+        .getDashboardData();
+    }
+    
+    function startAutoRefreshTimer() {
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(() => {
+        if (isPaused) return;
+        countdown--;
+        if (countdown <= 0) {
+          countdown = 60;
+          loadData(true);
+        } else {
+          document.getElementById('auto-refresh-text').textContent = `Оновлення через ${countdown}с`;
+        }
+      }, 1000);
+    }
+    
+    function formatDateStr(isoStr) {
+      if (!isoStr) return '';
+      const date = new Date(isoStr);
+      if (isNaN(date.getTime())) return isoStr;
+      const today = new Date();
+      if (date.toDateString() === today.toDateString()) {
+        return 'сьогодні ' + date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+      return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    try {
+      loadData();
+      startAutoRefreshTimer();
+    } catch (e) {
+      showErrorAlert("Помилка ініціалізації: " + e.toString());
+    }
+  </script>
+</body>
+</html>
