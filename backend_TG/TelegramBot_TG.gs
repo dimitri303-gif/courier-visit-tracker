@@ -3,11 +3,30 @@
  * Логіка відповідей бота, авторизації кур'єрів та керування змінами.
  */
 
+function getMainKeyboard() {
+  return {
+    "keyboard": [
+      [{"text": "▶️ Почати зміну"}, {"text": "⏹ Завершити зміну"}],
+      [{"text": "ℹ️ Як налаштувати"}]
+    ],
+    "resize_keyboard": true
+  };
+}
+
 function handleTelegramMessage(message) {
   var chatId = message.chat.id;
   var text = message.text || "";
   
   if (text === "/start") {
+    var profile = getCourierProfile(chatId);
+    if (profile) {
+      sendTelegramRequest("sendMessage", {
+        "chat_id": chatId,
+        "text": "👋 Вітаємо, " + profile.name + "!\n\nОберіть дію на клавіатурі нижче:",
+        "reply_markup": getMainKeyboard()
+      });
+      return;
+    }
     sendWelcomeMessage(chatId);
     return;
   }
@@ -27,11 +46,48 @@ function handleTelegramMessage(message) {
     return;
   }
   
+  if (text.indexOf("налаштувати") !== -1 || text === "/help" || text === "/setup") {
+    sendSetupInstructions(chatId);
+    return;
+  }
+  
   // Якщо кур'єр просто надіслав разову статичну локацію
   if (message.location) {
     handleTelegramLocation(message);
     return;
   }
+
+  // Для будь-якого іншого повідомлення повертаємо меню
+  var courierProfile = getCourierProfile(chatId);
+  if (courierProfile) {
+    sendTelegramRequest("sendMessage", {
+      "chat_id": chatId,
+      "text": "Оберіть дію на кнопках нижче 👇",
+      "reply_markup": getMainKeyboard()
+    });
+  }
+}
+
+function sendSetupInstructions(chatId) {
+  var text = "📱 *Інструкція з налаштування геопозиції:*\n\n" +
+             "🍏 *Для iPhone (iOS):*\n" +
+             "1️⃣ Відкрийте **Параметри** (Settings) на iPhone ⚙️\n" +
+             "2️⃣ Прокрутіть униз до списку програм і виберіть **Telegram**\n" +
+             "3️⃣ Перейдіть у пункт **«Геопозиція»** (Location)\n" +
+             "4️⃣ Оберіть **«Завжди»** (Always) — *(а не «Під час використання»)*\n" +
+             "5️⃣ Переконайтеся, що увімкнено **«Точна геопозиція»** (Precise Location)\n\n" +
+             "🤖 *Для Android:*\n" +
+             "1️⃣ Налаштування ➡️ Програми ➡️ **Telegram**\n" +
+             "2️⃣ Дозволи ➡️ Місцезнаходження ➡️ **«Дозволити у будь-якому режимі»** (Allow all the time)\n" +
+             "3️⃣ Увімкніть **«Точне місцезнаходження»**\n\n" +
+             "⚠️ *Це потрібно для того, щоб передача геопозиції не переривалася, коли екран телефону вимкнено або закрито додаток.*";
+
+  sendTelegramRequest("sendMessage", {
+    "chat_id": chatId,
+    "text": text,
+    "parse_mode": "Markdown",
+    "reply_markup": getMainKeyboard()
+  });
 }
 
 function sendWelcomeMessage(chatId) {
@@ -118,7 +174,8 @@ function handleContactRegistration(chatId, phone) {
       var welcomeText = "✅ Авторизація успішна, " + courierName + "!\n\nВикористовуйте кнопки нижче для управління зміною.";
       var keyboard = {
         "keyboard": [
-          [{"text": "▶️ Почати зміну"}, {"text": "⏹ Завершити зміну"}]
+          [{"text": "▶️ Почати зміну"}, {"text": "⏹ Завершити зміну"}],
+          [{"text": "ℹ️ Як налаштувати"}]
         ],
         "resize_keyboard": true
       };
@@ -214,7 +271,12 @@ function startShiftCommand(chatId) {
     });
     
     var text = "🟢 Зміну розпочато!\n\nТепер натисніть на **Скріпку (📎)** ➡️ **«Геопозиція»** ➡️ **«Транслювати мою геопозицію» (Live Location)** на 8 годин.";
-    sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": text, "parse_mode": "Markdown"});
+    sendTelegramRequest("sendMessage", {
+      "chat_id": chatId,
+      "text": text,
+      "parse_mode": "Markdown",
+      "reply_markup": getMainKeyboard()
+    });
   } catch (err) {
     Logger.log("startShiftCommand error: " + err.toString());
     sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "⚠️ Помилка старту зміни: " + err.toString()});
@@ -298,12 +360,14 @@ function endShiftCommand(chatId) {
     if (closed) {
       sendTelegramRequest("sendMessage", {
         "chat_id": chatId, 
-        "text": "🔴 Зміну успішно завершено!\nНе забудьте зупинити трансляцію геопозиції."
+        "text": "🔴 Зміну успішно завершено!\nНе забудьте зупинити трансляцію геопозиції.",
+        "reply_markup": getMainKeyboard()
       });
     } else {
       sendTelegramRequest("sendMessage", {
         "chat_id": chatId, 
-        "text": "У вас немає активної зміни."
+        "text": "У вас немає активної зміни.",
+        "reply_markup": getMainKeyboard()
       });
     }
   } catch (err) {
