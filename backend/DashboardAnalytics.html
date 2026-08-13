@@ -98,7 +98,10 @@
         <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/20">
           <h3 class="font-bold text-slate-800">Реєстр візитів</h3>
           <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
-            <select id="visits-filter-courier" onchange="renderVisitsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+            <select id="visits-filter-region" onchange="onVisitsRegionChange()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
+              <option value="all">Всі регіони</option>
+            </select>
+            <select id="visits-filter-courier" onchange="onVisitsCourierChange()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
               <option value="all">Всі кур’єри</option>
             </select>
             <select id="visits-filter-location" onchange="renderVisitsTable()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-main">
@@ -141,6 +144,22 @@
   let analyticsTrackMap = null;
   let analyticsTrackLayers = [];
 
+  function getTodayLocalDateString() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function initDefaultDates() {
+    const todayStr = getTodayLocalDateString();
+    const dateStartInput = document.getElementById('analytics-filter-date-start');
+    const dateEndInput = document.getElementById('analytics-filter-date-end');
+    if (dateStartInput && !dateStartInput.value) dateStartInput.value = todayStr;
+    if (dateEndInput && !dateEndInput.value) dateEndInput.value = todayStr;
+  }
+
   function switchTab(tabId) {
     activeTab = tabId;
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
@@ -152,6 +171,7 @@
   function renderCurrentTab(isBackground = false) {
     if (!rawData) return;
     if (activeTab === 'analytics') {
+      initDefaultDates();
       populateAnalyticsFilters();
       renderAnalyticsScorecards();
       renderAnalyticsCharts();
@@ -250,17 +270,92 @@ function getFilteredVisits() {
       });
     }
 
+    function populateMainCouriers(selectedRegion) {
+      const courierDropdown = document.getElementById('analytics-filter-courier');
+      if (!courierDropdown) return;
+      const currentCourier = courierDropdown.value;
+      courierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
+      
+      const couriers = rawData.couriers || [];
+      const filtered = selectedRegion === 'all' 
+        ? couriers 
+        : couriers.filter(c => c.region && String(c.region).trim() === selectedRegion);
+        
+      filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.courier_id;
+        opt.textContent = c.name + " (" + c.courier_id + ")";
+        courierDropdown.appendChild(opt);
+      });
+      
+      if (currentCourier && filtered.some(c => c.courier_id === currentCourier)) {
+        courierDropdown.value = currentCourier;
+      } else {
+        courierDropdown.value = 'all';
+      }
+    }
+
+    function populateTableCouriers(selectedRegion) {
+      const tableCourierDropdown = document.getElementById('visits-filter-courier');
+      if (!tableCourierDropdown) return;
+      const currentTableCourier = tableCourierDropdown.value;
+      tableCourierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
+      
+      const couriers = rawData.couriers || [];
+      const filtered = selectedRegion === 'all' 
+        ? couriers 
+        : couriers.filter(c => c.region && String(c.region).trim() === selectedRegion);
+        
+      filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.courier_id;
+        opt.textContent = c.name;
+        tableCourierDropdown.appendChild(opt);
+      });
+      
+      if (currentTableCourier && filtered.some(c => c.courier_id === currentTableCourier)) {
+        tableCourierDropdown.value = currentTableCourier;
+      } else {
+        tableCourierDropdown.value = 'all';
+      }
+    }
+
+    function populateTableLocations(selectedRegion) {
+      const tableLocationDropdown = document.getElementById('visits-filter-location');
+      if (!tableLocationDropdown) return;
+      const currentTableLocation = tableLocationDropdown.value;
+      tableLocationDropdown.innerHTML = '<option value="all">Всі локації</option>';
+      
+      const locations = rawData.locations || [];
+      const filtered = selectedRegion === 'all' 
+        ? locations 
+        : locations.filter(l => l.region && String(l.region).trim() === selectedRegion);
+        
+      filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.location_id;
+        opt.textContent = l.name;
+        tableLocationDropdown.appendChild(opt);
+      });
+      
+      if (currentTableLocation && filtered.some(l => l.location_id === currentTableLocation)) {
+        tableLocationDropdown.value = currentTableLocation;
+      } else {
+        tableLocationDropdown.value = 'all';
+      }
+    }
+
     // Populate dropdown lists for regions and couriers
     function populateAnalyticsFilters() {
       if (!rawData) return;
       
       const regionDropdown = document.getElementById('analytics-filter-region');
-      const courierDropdown = document.getElementById('analytics-filter-courier');
+      const tableRegionDropdown = document.getElementById('visits-filter-region');
       
-      if (!regionDropdown || !courierDropdown) return;
+      if (!regionDropdown || !tableRegionDropdown) return;
       
       const currentRegion = regionDropdown.value;
-      const currentCourier = courierDropdown.value;
+      const currentTableRegion = tableRegionDropdown.value;
       
       // 1. Populate Regions
       const locations = rawData.locations || [];
@@ -268,75 +363,92 @@ function getFilteredVisits() {
       const regionsSet = new Set();
       locations.forEach(l => { if (l.region) regionsSet.add(String(l.region).trim()); });
       couriers.forEach(c => { if (c.region) regionsSet.add(String(c.region).trim()); });
+      const sortedRegions = Array.from(regionsSet).sort();
       
       regionDropdown.innerHTML = '<option value="all">Всі філії</option>';
-      Array.from(regionsSet).sort().forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r;
-        opt.textContent = r;
-        regionDropdown.appendChild(opt);
+      tableRegionDropdown.innerHTML = '<option value="all">Всі регіони</option>';
+      sortedRegions.forEach(r => {
+        const opt1 = document.createElement('option');
+        opt1.value = r;
+        opt1.textContent = r;
+        regionDropdown.appendChild(opt1);
+        
+        const opt2 = document.createElement('option');
+        opt2.value = r;
+        opt2.textContent = r;
+        tableRegionDropdown.appendChild(opt2);
       });
       
-      if (currentRegion && Array.from(regionsSet).includes(currentRegion)) {
+      if (currentRegion && sortedRegions.includes(currentRegion)) {
         regionDropdown.value = currentRegion;
       } else {
         regionDropdown.value = 'all';
       }
       
-      // 2. Populate Couriers
-      courierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
-      couriers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.courier_id;
-        opt.textContent = c.name + " (" + c.courier_id + ")";
-        courierDropdown.appendChild(opt);
-      });
-      
-      if (currentCourier && couriers.some(c => c.courier_id === currentCourier)) {
-        courierDropdown.value = currentCourier;
+      if (currentTableRegion && sortedRegions.includes(currentTableRegion)) {
+        tableRegionDropdown.value = currentTableRegion;
       } else {
-        courierDropdown.value = 'all';
+        tableRegionDropdown.value = 'all';
       }
-
-      // 3. Populate Visits Table specific Courier Filter
-      const tableCourierDropdown = document.getElementById('visits-filter-courier');
-      if (tableCourierDropdown) {
-        const currentTableCourier = tableCourierDropdown.value;
-        tableCourierDropdown.innerHTML = '<option value="all">Всі кур’єри</option>';
-        couriers.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
-          const opt = document.createElement('option');
-          opt.value = c.courier_id;
-          opt.textContent = c.name;
-          tableCourierDropdown.appendChild(opt);
-        });
-        if (currentTableCourier && couriers.some(c => c.courier_id === currentTableCourier)) {
-          tableCourierDropdown.value = currentTableCourier;
-        } else {
-          tableCourierDropdown.value = 'all';
-        }
-      }
-
-      // 4. Populate Visits Table specific Location Filter
-      const tableLocationDropdown = document.getElementById('visits-filter-location');
-      if (tableLocationDropdown) {
-        const currentTableLocation = tableLocationDropdown.value;
-        tableLocationDropdown.innerHTML = '<option value="all">Всі локації</option>';
-        locations.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(l => {
-          const opt = document.createElement('option');
-          opt.value = l.location_id;
-          opt.textContent = l.name;
-          tableLocationDropdown.appendChild(opt);
-        });
-        if (currentTableLocation && locations.some(l => l.location_id === currentTableLocation)) {
-          tableLocationDropdown.value = currentTableLocation;
-        } else {
-          tableLocationDropdown.value = 'all';
-        }
-      }
+      
+      // 2. Populate Couriers & Locations based on selected regions
+      populateMainCouriers(regionDropdown.value);
+      populateTableCouriers(tableRegionDropdown.value);
+      populateTableLocations(tableRegionDropdown.value);
     }
 
     // Triggered when filters change
     function applyAnalyticsFilters() {
+      const regionDropdown = document.getElementById('analytics-filter-region');
+      const tableRegionDropdown = document.getElementById('visits-filter-region');
+      if (regionDropdown && tableRegionDropdown) {
+        if (tableRegionDropdown.value !== regionDropdown.value) {
+          tableRegionDropdown.value = regionDropdown.value;
+          populateTableCouriers(regionDropdown.value);
+          populateTableLocations(regionDropdown.value);
+        }
+        populateMainCouriers(regionDropdown.value);
+      }
+      
+      const courierDropdown = document.getElementById('analytics-filter-courier');
+      const tableCourierDropdown = document.getElementById('visits-filter-courier');
+      if (courierDropdown && tableCourierDropdown) {
+        if (tableCourierDropdown.value !== courierDropdown.value) {
+          tableCourierDropdown.value = courierDropdown.value;
+        }
+      }
+      
+      renderAnalyticsScorecards();
+      renderAnalyticsCharts();
+      renderVisitsTable();
+      renderAnalyticsMap();
+    }
+    
+    function onVisitsRegionChange() {
+      const regionDropdown = document.getElementById('analytics-filter-region');
+      const tableRegionDropdown = document.getElementById('visits-filter-region');
+      if (regionDropdown && tableRegionDropdown) {
+        if (regionDropdown.value !== tableRegionDropdown.value) {
+          regionDropdown.value = tableRegionDropdown.value;
+          populateMainCouriers(tableRegionDropdown.value);
+        }
+        populateTableCouriers(tableRegionDropdown.value);
+        populateTableLocations(tableRegionDropdown.value);
+      }
+      renderAnalyticsScorecards();
+      renderAnalyticsCharts();
+      renderVisitsTable();
+      renderAnalyticsMap();
+    }
+    
+    function onVisitsCourierChange() {
+      const courierDropdown = document.getElementById('analytics-filter-courier');
+      const tableCourierDropdown = document.getElementById('visits-filter-courier');
+      if (courierDropdown && tableCourierDropdown) {
+        if (courierDropdown.value !== tableCourierDropdown.value) {
+          courierDropdown.value = tableCourierDropdown.value;
+        }
+      }
       renderAnalyticsScorecards();
       renderAnalyticsCharts();
       renderVisitsTable();
@@ -345,10 +457,19 @@ function getFilteredVisits() {
     
     // Clear all filters
     function resetAnalyticsFilters() {
-      document.getElementById('analytics-filter-date-start').value = '';
-      document.getElementById('analytics-filter-date-end').value = '';
+      const todayStr = getTodayLocalDateString();
+      document.getElementById('analytics-filter-date-start').value = todayStr;
+      document.getElementById('analytics-filter-date-end').value = todayStr;
       document.getElementById('analytics-filter-region').value = 'all';
+      document.getElementById('visits-filter-region').value = 'all';
+      
+      populateMainCouriers('all');
+      populateTableCouriers('all');
+      populateTableLocations('all');
+      
       document.getElementById('analytics-filter-courier').value = 'all';
+      document.getElementById('visits-filter-courier').value = 'all';
+      
       applyAnalyticsFilters();
     }
 
@@ -720,6 +841,8 @@ function getFilteredVisits() {
       const filterSource = document.getElementById('visits-filter-source').value;
       const filterCourier = document.getElementById('visits-filter-courier').value;
       const filterLocation = document.getElementById('visits-filter-location').value;
+      const filterRegionDropdown = document.getElementById('visits-filter-region');
+      const filterRegion = filterRegionDropdown ? filterRegionDropdown.value : 'all';
       
       const visits = getFilteredVisits();
       const stops = getFilteredStops();
@@ -730,6 +853,8 @@ function getFilteredVisits() {
       
       const courierMap = {};
       couriers.forEach(function(c) { courierMap[c.courier_id] = c.name; });
+      const courierObjMap = {};
+      couriers.forEach(function(c) { courierObjMap[c.courier_id] = c; });
       const locationMap = {};
       locations.forEach(function(l) { locationMap[l.location_id] = l; });
       
@@ -744,7 +869,12 @@ function getFilteredVisits() {
         const matchesCourier = filterCourier === 'all' || v.courier_id === filterCourier;
         const matchesLocation = filterLocation === 'all' || v.location_id === filterLocation;
         
-        return matchesSearch && matchesSource && matchesCourier && matchesLocation;
+        const cObj = courierObjMap[v.courier_id] || {};
+        const matchesRegion = filterRegion === 'all' || 
+          (lObj.region && String(lObj.region).trim() === filterRegion) || 
+          (cObj.region && String(cObj.region).trim() === filterRegion);
+        
+        return matchesSearch && matchesSource && matchesCourier && matchesLocation && matchesRegion;
       });
       
       const filteredStops = stops.filter(function(s) {
@@ -754,7 +884,11 @@ function getFilteredVisits() {
         const matchesCourier = filterCourier === 'all' || s.courier_id === filterCourier;
         const matchesLocation = filterLocation === 'all';
         
-        return matchesSearch && matchesSource && matchesCourier && matchesLocation;
+        const cObj = courierObjMap[s.courier_id] || {};
+        const matchesRegion = filterRegion === 'all' || 
+          (cObj.region && String(cObj.region).trim() === filterRegion);
+        
+        return matchesSearch && matchesSource && matchesCourier && matchesLocation && matchesRegion;
       });
       
       const combinedEvents = [];
