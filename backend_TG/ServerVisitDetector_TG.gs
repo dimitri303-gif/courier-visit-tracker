@@ -1,25 +1,47 @@
 /**
  * ServerVisitDetector_TG.gs
- * Обчислення візитів на сервері (заміна клієнтського детектора).
+ * Серверний детектор візитів, оновлення гео-статусу кур'єра та логування подій у реальному часі.
  */
 
 function handleTelegramLocation(message) {
   try {
-    var chatId = message.chat.id;
-    if (!message.location) return;
+    var chatId = message.chat ? message.chat.id : null;
+    if (!chatId || !message.location) return;
     
     var lat = message.location.latitude;
     var lng = message.location.longitude;
-    var timestamp = message.edit_date || message.date; // Unix time in seconds
+    var accuracy = message.location.horizontal_accuracy || 10;
+    var timestamp = message.edit_date || message.date || Math.floor(Date.now() / 1000); // Unix time in seconds
     
-    var courierId = getCourierIdFromChat(chatId);
-    if (!courierId) return; // Невідомий користувач
+    var profile = getCourierProfile(chatId);
+    if (!profile) {
+      Logger.log("Unknown courier for chat: " + chatId);
+      return;
+    }
     
+    var courierId = profile.courier_id;
+    var courierName = profile.name;
+    var shiftId = getActiveShiftId(courierId);
+    
+    // Якщо зміни немає — не обробляємо візити, але можна оновити локацію кур'єра
+    if (!shiftId) {
+      Logger.log("No active shift for courier: " + courierId);
+      return;
+    }
+    
+    // 1. ОНОВЛЮЄМО СТАТУС ТА КООРДИНАТИ КУР'ЄРА НА ДАШБОРДІ
+    updateCourierStatus_TG(courierId, courierName, lat, lng, accuracy, null, "active");
+    
+    // 2. ЛОГУЄМО ПЕРІОДИЧНИЙ HEARTBEAT В EventLog
+    logEvent_TG(courierId, shiftId, "heartbeat", "Periodic location heartbeat", {
+      latitude: lat,
+      longitude: lng,
+      accuracy_m: accuracy,
+      source: "telegram_live"
+    });
+    
+    // 3. Отримуємо список активних гео-точок
     var cache = CacheService.getScriptCache();
-    var shiftId = cache.get("shift_" + courierId);
-    if (!shiftId) return; // Немає активної зміни
-    
-    // 1. Отримуємо кешовані локації
     var locationsStr = cache.get("locations_TG");
     var locations = [];
     if (locationsStr) {
@@ -35,7 +57,7 @@ function handleTelegramLocation(message) {
       } catch(e) {}
     }
     
-    // 2. Пошук найближчої точки
+    // 4. Пошук найближчої точки
     var closestLoc = null;
     var minDistance = Infinity;
     
@@ -47,7 +69,7 @@ function handleTelegramLocation(message) {
       }
     }
     
-    // 3. State Machine (Кінцевий автомат)
+    // 5. Детекція візитів (State Machine)
     var stateStr = cache.get("state_TG_" + courierId);
     var state = null;
     if (stateStr) {
@@ -57,12 +79,12 @@ function handleTelegramLocation(message) {
     }
     
     var DWELL_TIME_SEC = 60; // 60 секунд для зарахування візиту
-    var EXIT_THRESHOLD = 3;  // 3 виміри поза зоною для виходу
+    var EXIT_THRESHOLD = 3;  // 3 виміри поза зоною для фіксації виходу
     
     if (closestLoc && minDistance <= closestLoc.radius_m) {
-      // МИ В ЗОНІ
+      // МИ В ЗОНІ ТОЧКИ
       if (!state) {
-        // Новий кандидат
+        // Новий кандидат у візити
         state = {
           location_id: closestLoc.location_id,
           location_name: closestLoc.name,
@@ -73,23 +95,37 @@ function handleTelegramLocation(message) {
           enter_lng: lng,
           outside_count: 0
         };
+        
+        logEvent_TG(courierId, shiftId, "diagnostic", "Location candidate: " + closestLoc.name + " (" + closestLoc.location_id + "), distance: " + minDistance + "m", {
+          location_id: closestLoc.location_id,
+          distance_m: minDistance
+        });
       } else {
         if (state.location_id === closestLoc.location_id) {
           state.last_seen = timestamp;
           state.outside_count = 0;
           
-          // Перехід Кандидат -> Підтверджений візит
+          // Перехід Кандидат -> Підтверджений візит (перебування > 60 сек)
           if (state.status === "candidate" && (timestamp - state.enter_time) >= DWELL_TIME_SEC) {
             state.status = "inside";
+            
+            logEvent_TG(courierId, shiftId, "visit_detected", "Visit confirmed: " + closestLoc.name + " (" + closestLoc.location_id + ") after " + (timestamp - state.enter_time) + "s", {
+              location_id: closestLoc.location_id,
+              dwell_seconds: (timestamp - state.enter_time)
+            });
+            
             sendTelegramRequest("sendMessage", {
               "chat_id": chatId, 
               "text": "📍 Візит на точку «" + closestLoc.name + "» розпочато."
             });
           }
         } else {
-          // Зміна локації
+          // Кур'єр перемістився на іншу локацію
           if (state.status === "inside") {
             recordVisit(courierId, shiftId, state, timestamp, lat, lng);
+            logEvent_TG(courierId, shiftId, "visit_completed", "Visit completed: " + state.location_name, {
+              location_id: state.location_id
+            });
           }
           state = {
             location_id: closestLoc.location_id,
@@ -101,14 +137,20 @@ function handleTelegramLocation(message) {
             enter_lng: lng,
             outside_count: 0
           };
+          
+          logEvent_TG(courierId, shiftId, "diagnostic", "Location candidate: " + closestLoc.name + " (" + closestLoc.location_id + "), distance: " + minDistance + "m", {
+            location_id: closestLoc.location_id,
+            distance_m: minDistance
+          });
         }
       }
+      
       try {
         cache.put("state_TG_" + courierId, JSON.stringify(state), 21600);
       } catch(e) {}
       
     } else {
-      // МИ ПОЗА ЗОНОЮ
+      // МИ ПОЗА ЗОНОЮ ТОЧОК
       if (state) {
         state.outside_count = (state.outside_count || 0) + 1;
         
@@ -116,6 +158,10 @@ function handleTelegramLocation(message) {
           if (state.status === "inside") {
             var exitTime = state.last_seen;
             recordVisit(courierId, shiftId, state, exitTime, lat, lng);
+            
+            logEvent_TG(courierId, shiftId, "visit_completed", "Visit completed: " + (state.location_name || state.location_id), {
+              location_id: state.location_id
+            });
             
             sendTelegramRequest("sendMessage", {
               "chat_id": chatId, 
@@ -174,6 +220,11 @@ function recordVisit(courierId, shiftId, state, exitTime, exitLat, exitLng) {
       now, // created_at
       JSON.stringify(state) // raw_payload
     ]);
+    
+    var lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow, 6).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    sheet.getRange(lastRow, 7).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    sheet.getRange(lastRow, 17).setNumberFormat("dd.MM.yyyy HH:mm:ss");
   } catch (e) {
     Logger.log("recordVisit error: " + e.toString());
   }

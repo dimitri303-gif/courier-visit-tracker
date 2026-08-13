@@ -1,6 +1,6 @@
 /**
  * TelegramBot_TG.gs
- * Логіка відповідей бота та авторизації кур'єрів.
+ * Логіка відповідей бота, авторизації кур'єрів та керування змінами.
  */
 
 function handleTelegramMessage(message) {
@@ -27,7 +27,7 @@ function handleTelegramMessage(message) {
     return;
   }
   
-  // Якщо кур'єр просто надсилає разову локацію
+  // Якщо кур'єр просто надіслав разову статичну локацію
   if (message.location) {
     handleTelegramLocation(message);
     return;
@@ -108,7 +108,9 @@ function handleContactRegistration(chatId, phone) {
       // Зберігаємо прив'язку в CacheService
       try {
         var cache = CacheService.getScriptCache();
-        cache.put("chat_" + chatId, courierId, 21600); // 6 годин
+        var profile = { courier_id: courierId, name: courierName, phone: phone };
+        cache.put("profile_" + chatId, JSON.stringify(profile), 21600);
+        cache.put("chat_" + chatId, courierId, 21600);
       } catch (cacheErr) {
         Logger.log("Cache error: " + cacheErr.toString());
       }
@@ -141,45 +143,16 @@ function handleContactRegistration(chatId, phone) {
   }
 }
 
-function getCourierIdFromChat(chatId) {
-  try {
-    var cache = CacheService.getScriptCache();
-    var courierId = cache.get("chat_" + chatId);
-    if (courierId) return courierId;
-  } catch(e) {}
-  
-  // Якщо немає в кеші - шукаємо в базі по токену
-  try {
-    var ss = getSpreadsheet();
-    var sheet = ss.getSheetByName("Couriers");
-    if (!sheet) return null;
-    
-    var rows = sheet.getDataRange().getValues();
-    for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][4]) === String(chatId)) {
-        var cId = String(rows[i][0]);
-        try {
-          var c = CacheService.getScriptCache();
-          c.put("chat_" + chatId, cId, 21600);
-        } catch(e) {}
-        return cId;
-      }
-    }
-  } catch(e) {
-    Logger.log("getCourierIdFromChat error: " + e.toString());
-  }
-  
-  return null;
-}
-
 function startShiftCommand(chatId) {
   try {
-    var courierId = getCourierIdFromChat(chatId);
-    if (!courierId) {
-      sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "Спочатку авторизуйтесь через /start"});
+    var profile = getCourierProfile(chatId);
+    if (!profile) {
+      sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "Спочатку авторизуйтесь через команду /start"});
       return;
     }
     
+    var courierId = profile.courier_id;
+    var courierName = profile.name;
     var shiftId = generateUUID();
     var startTime = new Date();
     
@@ -200,7 +173,7 @@ function startShiftCommand(chatId) {
           var prevStart = new Date(rows[i][2]);
           var durationMins = Math.round((startTime.getTime() - prevStart.getTime()) / 60000);
           var targetRow = startR + i;
-          sheet.getRange(targetRow, 4).setValue(startTime); // end_time
+          sheet.getRange(targetRow, 4).setValue(startTime).setNumberFormat("dd.MM.yyyy HH:mm:ss"); // end_time
           sheet.getRange(targetRow, 5).setValue(durationMins); // duration_minutes
           sheet.getRange(targetRow, 9).setValue("auto-closed"); // status
           sheet.getRange(targetRow, 10).setValue("Автоматично закрито новою зміною з Telegram");
@@ -221,12 +194,24 @@ function startShiftCommand(chatId) {
       "active", // status
       "Started via Telegram Bot" // notes
     ]);
+    var newShiftRow = sheet.getLastRow();
+    sheet.getRange(newShiftRow, 3).setNumberFormat("dd.MM.yyyy HH:mm:ss");
     
     // Зберігаємо ID активної зміни в кеш
     try {
       var cache = CacheService.getScriptCache();
       cache.put("shift_" + courierId, shiftId, 21600);
     } catch(e) {}
+    
+    // ОНОВЛЮЄМО СТАТУС КУР'ЄРА НА ДАШБОРДІ В РЕАЛЬНОМУ ЧАСІ
+    updateCourierStatus_TG(courierId, courierName, null, null, null, null, "active");
+    
+    // ЛОГУЄМО ПОДІЮ СТАРТУ ЗМІНИ В EventLog
+    logEvent_TG(courierId, shiftId, "shift_start", "Shift started via Telegram Bot", {
+      platform: "telegram",
+      device_id: "tg_" + chatId,
+      app_version: "1.0.0"
+    });
     
     var text = "🟢 Зміну розпочато!\n\nТепер натисніть на **Скріпку (📎)** ➡️ **«Геопозиція»** ➡️ **«Транслювати мою геопозицію» (Live Location)** на 8 годин.";
     sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": text, "parse_mode": "Markdown"});
@@ -238,10 +223,15 @@ function startShiftCommand(chatId) {
 
 function endShiftCommand(chatId) {
   try {
-    var courierId = getCourierIdFromChat(chatId);
-    if (!courierId) return;
+    var profile = getCourierProfile(chatId);
+    if (!profile) {
+      sendTelegramRequest("sendMessage", {"chat_id": chatId, "text": "Спочатку авторизуйтесь через команду /start"});
+      return;
+    }
     
-    var cache = CacheService.getScriptCache();
+    var courierId = profile.courier_id;
+    var courierName = profile.name;
+    var activeShiftId = getActiveShiftId(courierId);
     var endTime = new Date();
     
     var ss = getSpreadsheet();
@@ -250,6 +240,7 @@ function endShiftCommand(chatId) {
     
     var lastRow = sheet.getLastRow();
     var closed = false;
+    var foundShiftId = activeShiftId;
     
     if (lastRow > 1) {
       var numRows = Math.min(lastRow - 1, 100);
@@ -258,10 +249,11 @@ function endShiftCommand(chatId) {
       
       for (var i = rows.length - 1; i >= 0; i--) {
         if (String(rows[i][1]) === courierId && String(rows[i][8]) === "active") {
+          foundShiftId = String(rows[i][0]);
           var prevStart = new Date(rows[i][2]);
           var durationMins = Math.round((endTime.getTime() - prevStart.getTime()) / 60000);
           var targetRow = startR + i;
-          sheet.getRange(targetRow, 4).setValue(endTime);
+          sheet.getRange(targetRow, 4).setValue(endTime).setNumberFormat("dd.MM.yyyy HH:mm:ss");
           sheet.getRange(targetRow, 5).setValue(durationMins);
           sheet.getRange(targetRow, 9).setValue("ended");
           closed = true;
@@ -271,9 +263,37 @@ function endShiftCommand(chatId) {
     }
     
     try {
+      var cache = CacheService.getScriptCache();
+      
+      // Якщо кур'єр перебував на точці під час завершення зміни — автоматично записуємо завершений візит
+      var stateStr = cache.get("state_TG_" + courierId);
+      if (stateStr) {
+        try {
+          var state = JSON.parse(stateStr);
+          if (state && state.status === "inside") {
+            var exitUnix = Math.floor(endTime.getTime() / 1000);
+            recordVisit(courierId, foundShiftId, state, exitUnix, state.enter_lat, state.enter_lng);
+            logEvent_TG(courierId, foundShiftId, "visit_completed", "Visit completed on shift end: " + (state.location_name || state.location_id), {
+              location_id: state.location_id
+            });
+          }
+        } catch(stErr) {
+          Logger.log("Auto-record visit on shift end error: " + stErr.toString());
+        }
+      }
+      
       cache.remove("shift_" + courierId);
       cache.remove("state_TG_" + courierId);
     } catch(e) {}
+    
+    // ОНОВЛЮЄМО СТАТУС КУР'ЄРА НА ДАШБОРДІ (ended)
+    updateCourierStatus_TG(courierId, courierName, null, null, null, null, "ended");
+    
+    // ЛОГУЄМО ПОДІЮ ЗАВЕРШЕННЯ ЗМІНИ В EventLog
+    logEvent_TG(courierId, foundShiftId, "shift_end", "Shift ended via Telegram Bot", {
+      platform: "telegram",
+      device_id: "tg_" + chatId
+    });
     
     if (closed) {
       sendTelegramRequest("sendMessage", {

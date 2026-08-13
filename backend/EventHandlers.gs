@@ -21,6 +21,23 @@ function handleEventsBatch(data, courier) {
   var logsSheet = ss.getSheetByName("EventLog");
   var stopsSheet = ss.getSheetByName("Stops");
   
+  if (!shiftId) {
+    var shiftsSheet = ss.getSheetByName("Shifts");
+    if (shiftsSheet) {
+      var sLastRow = shiftsSheet.getLastRow();
+      if (sLastRow > 1) {
+        var sNum = Math.min(sLastRow - 1, 50);
+        var sRows = shiftsSheet.getRange(sLastRow - sNum + 1, 1, sNum, 9).getValues();
+        for (var si = sRows.length - 1; si >= 0; si--) {
+          if (String(sRows[si][1]) === courierId) {
+            shiftId = String(sRows[si][0]);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
   var visitRows = [];
   var lastVisitRow = visitsSheet.getLastRow();
   if (lastVisitRow > 1) {
