@@ -145,7 +145,7 @@ function handleEventsBatch(data, courier) {
             var latDot = String(idleDetails.anchor_lat).replace(',', '.');
             var lngDot = String(idleDetails.anchor_lng).replace(',', '.');
             var mapLink = (idleDetails.anchor_lat && idleDetails.anchor_lng)
-              ? '=HYPERLINK("https://www.google.com/maps?q=' + latDot + ',' + lngDot + '", "Карта")'
+              ? '=HYPERLINK("https://www.google.com/maps?q=' + latDot + ',' + lngDot + '"; "Карта")'
               : "";
             newStopRows.push([
               idleDetails.stop_uuid || Utilities.getUuid(),

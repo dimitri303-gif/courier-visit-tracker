@@ -40,6 +40,7 @@ function doGet(e) {
       var page = e.parameter.page || 'maps';
       var PAGE_MAP = {
         'maps': 'DashboardMaps',
+        'track-map': 'DashboardTrackMap',
         'analytics': 'DashboardAnalytics',
         'database': 'DashboardDB'
       };

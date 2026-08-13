@@ -1,0 +1,618 @@
+<?!= include('DashboardHeader'); ?>
+<div id="tab-track-map" class="tab-pane flex-1 flex flex-col lg:flex-row gap-6 min-h-[600px]">
+      <!-- Map Container -->
+      <div class="flex-1 bg-brand-card border border-slate-200 rounded-2xl overflow-hidden relative shadow-sm min-h-[450px] lg:min-h-0 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 flex-wrap gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+            <span class="font-bold text-sm text-slate-700">Історія переміщень кур'єра на карті</span>
+          </div>
+          <span id="track-map-counter" class="text-xs font-semibold text-slate-500">0 точок на треку</span>
+        </div>
+        <div id="track-leaflet-map" style="height: 550px; width: 100%;" class="z-10"></div>
+      </div>
+      
+      <!-- Filters and Timeline Side Panel -->
+      <div class="w-full lg:w-[400px] bg-brand-card border border-slate-200 rounded-2xl p-4 flex flex-col gap-4 shadow-sm shrink-0">
+        <div class="border-b border-slate-100 pb-3">
+          <h3 class="font-bold text-slate-800">Параметри треку</h3>
+        </div>
+        
+        <!-- Filters Grid -->
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label for="track-courier-filter" class="text-xs font-semibold text-slate-500">Кур’єр:</label>
+              <select id="track-courier-filter" onchange="renderTrackMap()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 outline-none focus:border-brand-main font-semibold">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="track-date-filter" class="text-xs font-semibold text-slate-500">Дата:</label>
+              <select id="track-date-filter" onchange="renderTrackMap()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 outline-none focus:border-brand-main font-semibold">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label for="track-time-from" class="text-xs font-semibold text-slate-500">Час з:</label>
+              <select id="track-time-from" onchange="renderTrackMap()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 outline-none focus:border-brand-main font-semibold">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="track-time-to" class="text-xs font-semibold text-slate-500">Час по:</label>
+              <select id="track-time-to" onchange="renderTrackMap()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 outline-none focus:border-brand-main font-semibold">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Timeline -->
+        <div class="border-t border-slate-100 pt-3 flex justify-between items-center bg-slate-50/20">
+          <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Хронологія дня</h3>
+          <span id="timeline-counter" class="bg-indigo-50 text-indigo-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold">0 подій</span>
+        </div>
+        
+        <div id="track-timeline-list" class="flex-1 overflow-y-auto space-y-3 max-h-[350px] pr-1">
+          <!-- Dynamically populated timeline events -->
+        </div>
+      </div>
+    </div>
+
+<script>
+  function parseDateString(dateStr) {
+    if (!dateStr) return null;
+    let d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d;
+    const parts = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (parts) {
+      return new Date(
+        parseInt(parts[3], 10),
+        parseInt(parts[2], 10) - 1,
+        parseInt(parts[1], 10),
+        parseInt(parts[4], 10),
+        parseInt(parts[5], 10),
+        parseInt(parts[6], 10)
+      );
+    }
+    return null;
+  }
+
+  let activeTab = 'track-map';
+  let trackLeafletMap = null;
+  let trackMapMarkers = [];
+  let trackPolyline = null;
+
+  function switchTab(tabId) {
+    activeTab = tabId;
+    renderCurrentTab();
+  }
+
+  function renderCurrentTab(isBackground = false) {
+    if (!rawData) return;
+    initTrackMap(isBackground);
+  }
+
+  function formatTime(d) {
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function initTrackMap(isBackground = false) {
+    const mapContainer = document.getElementById('track-leaflet-map');
+    if (!mapContainer) return;
+    
+    if (!trackLeafletMap) {
+      trackLeafletMap = L.map('track-leaflet-map').setView([50.4501, 30.5234], 11);
+      
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(trackLeafletMap);
+    }
+    
+    const courierSelect = document.getElementById('track-courier-filter');
+    const dateSelect = document.getElementById('track-date-filter');
+    const timeFromSelect = document.getElementById('track-time-from');
+    const timeToSelect = document.getElementById('track-time-to');
+    
+    // 1. Populate hours if empty
+    if (timeFromSelect && timeFromSelect.children.length === 0) {
+      for (let h = 0; h < 24; h++) {
+        const padH = String(h).padStart(2, '0');
+        const opt = document.createElement('option');
+        opt.value = `${padH}:00`;
+        opt.textContent = `${padH}:00`;
+        timeFromSelect.appendChild(opt);
+      }
+      timeFromSelect.value = '00:00';
+    }
+    if (timeToSelect && timeToSelect.children.length === 0) {
+      for (let h = 0; h < 24; h++) {
+        const padH = String(h).padStart(2, '0');
+        const opt = document.createElement('option');
+        opt.value = `${padH}:59`;
+        opt.textContent = `${padH}:59`;
+        timeToSelect.appendChild(opt);
+      }
+      timeToSelect.value = '23:59';
+    }
+    
+    // 2. Populate Couriers
+    if (courierSelect) {
+      const prevVal = courierSelect.value;
+      courierSelect.innerHTML = '';
+      const couriers = rawData.couriers || [];
+      couriers.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.courier_id;
+        opt.textContent = `${c.name} (${c.courier_id})`;
+        courierSelect.appendChild(opt);
+      });
+      if (prevVal && Array.from(courierSelect.options).some(o => o.value === prevVal)) {
+        courierSelect.value = prevVal;
+      } else if (courierSelect.options.length > 0) {
+        courierSelect.selectedIndex = 0;
+      }
+    }
+    
+    // 3. Populate Dates
+    if (dateSelect) {
+      const prevVal = dateSelect.value;
+      dateSelect.innerHTML = '';
+      
+      const dateSet = new Set();
+      const today = new Date();
+      const formatLocal = (d) => {
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+      };
+      const todayStr = formatLocal(today);
+      dateSet.add(todayStr);
+      
+      const logs = rawData.eventLogs || [];
+      logs.forEach(log => {
+        const d = parseDateString(log.timestamp);
+        if (d) {
+          dateSet.add(formatLocal(d));
+        }
+      });
+      
+      const sortedDates = Array.from(dateSet).sort((a, b) => {
+        const parseDMY = (s) => {
+          const parts = s.split('.');
+          return new Date(parts[2], parts[1] - 1, parts[0]);
+        };
+        return parseDMY(b) - parseDMY(a);
+      });
+      
+      sortedDates.forEach(dStr => {
+        const opt = document.createElement('option');
+        opt.value = dStr;
+        opt.textContent = dStr;
+        dateSelect.appendChild(opt);
+      });
+      
+      if (prevVal && sortedDates.includes(prevVal)) {
+        dateSelect.value = prevVal;
+      } else {
+        dateSelect.value = todayStr;
+      }
+    }
+    
+    renderTrackMap(isBackground);
+  }
+
+  function renderTrackMap(isBackground = false) {
+    if (!rawData || !trackLeafletMap) return;
+    
+    trackMapMarkers.forEach(m => trackLeafletMap.removeLayer(m));
+    trackMapMarkers = [];
+    if (trackPolyline) {
+      trackLeafletMap.removeLayer(trackPolyline);
+      trackPolyline = null;
+    }
+    
+    const courierSelect = document.getElementById('track-courier-filter');
+    const dateSelect = document.getElementById('track-date-filter');
+    const timeFromSelect = document.getElementById('track-time-from');
+    const timeToSelect = document.getElementById('track-time-to');
+    
+    if (!courierSelect || !dateSelect) return;
+    
+    const courierId = courierSelect.value;
+    const dateStr = dateSelect.value;
+    const timeFrom = timeFromSelect ? timeFromSelect.value : '00:00';
+    const timeTo = timeToSelect ? timeToSelect.value : '23:59';
+    
+    if (!courierId || !dateStr) return;
+    
+    const parseTime = (timeStr) => {
+      const parts = timeStr.split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    };
+    
+    const fromMinutes = parseTime(timeFrom);
+    const toMinutes = parseTime(timeTo);
+    
+    const heartbeats = [];
+    const logs = rawData.eventLogs || [];
+    
+    logs.forEach(log => {
+      if (log.courier_id !== courierId || log.event_type !== 'heartbeat') return;
+      
+      const logDate = parseDateString(log.timestamp);
+      if (!logDate) return;
+      
+      const dd = String(logDate.getDate()).padStart(2, '0');
+      const mm = String(logDate.getMonth() + 1).padStart(2, '0');
+      const yyyy = logDate.getFullYear();
+      const logDateStr = `${dd}.${mm}.${yyyy}`;
+      if (logDateStr !== dateStr) return;
+      
+      const logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+      if (logMinutes < fromMinutes || logMinutes > toMinutes) return;
+      
+      let details = {};
+      if (log.payload_json) {
+        try {
+          const payload = JSON.parse(log.payload_json);
+          details = typeof payload.details === 'string' ? JSON.parse(payload.details) : payload.details;
+        } catch (e) {
+          console.warn('Failed to parse details for log', log.log_id, e);
+        }
+      }
+      
+      const lat = parseFloat(details.latitude || details.lat);
+      const lng = parseFloat(details.longitude || details.lng);
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        heartbeats.push({
+          timestamp: logDate,
+          lat: lat,
+          lng: lng,
+          accuracy: details.accuracy_m || details.accuracy || 'н/д',
+          battery: details.battery !== undefined ? details.battery : 'н/д'
+        });
+      }
+    });
+    
+    heartbeats.sort((a, b) => a.timestamp - b.timestamp);
+    
+    const visits = rawData.visits || [];
+    const stops = rawData.stops || [];
+    
+    const matchedVisits = [];
+    const matchedStops = [];
+    
+    visits.forEach(v => {
+      if (v.courier_id !== courierId) return;
+      const t = parseDateString(v.enter_time || v.created_at);
+      if (!t) return;
+      
+      const dd = String(t.getDate()).padStart(2, '0');
+      const mm = String(t.getMonth() + 1).padStart(2, '0');
+      const yyyy = t.getFullYear();
+      const vDateStr = `${dd}.${mm}.${yyyy}`;
+      if (vDateStr !== dateStr) return;
+      
+      const vMinutes = t.getHours() * 60 + t.getMinutes();
+      if (vMinutes < fromMinutes || vMinutes > toMinutes) return;
+      
+      matchedVisits.push(v);
+    });
+    
+    stops.forEach(s => {
+      if (s.courier_id !== courierId) return;
+      const t = parseDateString(s.start_time || s.created_at);
+      if (!t) return;
+      
+      const dd = String(t.getDate()).padStart(2, '0');
+      const mm = String(t.getMonth() + 1).padStart(2, '0');
+      const yyyy = t.getFullYear();
+      const sDateStr = `${dd}.${mm}.${yyyy}`;
+      if (sDateStr !== dateStr) return;
+      
+      const sMinutes = t.getHours() * 60 + t.getMinutes();
+      if (sMinutes < fromMinutes || sMinutes > toMinutes) return;
+      
+      matchedStops.push(s);
+    });
+    
+    const locMap = {};
+    (rawData.locations || []).forEach(loc => {
+      locMap[loc.location_id] = loc;
+    });
+    
+    const polylineCoords = [];
+    heartbeats.forEach(hb => {
+      polylineCoords.push([hb.lat, hb.lng]);
+      
+      const hbMarker = L.circleMarker([hb.lat, hb.lng], {
+        radius: 3.5,
+        fillColor: '#3b82f6',
+        color: '#ffffff',
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.9
+      }).addTo(trackLeafletMap);
+      
+      const updatedTime = formatTime(hb.timestamp);
+      hbMarker.bindPopup(`
+        <div class="text-xs space-y-1 p-0.5">
+          <div class="font-bold text-slate-800 text-sm">⚡ Heartbeat (GPS)</div>
+          <div><b>Час:</b> ${updatedTime}</div>
+          <div><b>Батарея:</b> ${hb.battery}%</div>
+          <div><b>Точність:</b> ${hb.accuracy} м</div>
+          <div><b>Координати:</b> ${hb.lat.toFixed(6)}, ${hb.lng.toFixed(6)}</div>
+        </div>
+      `);
+      
+      trackMapMarkers.push(hbMarker);
+    });
+    
+    if (polylineCoords.length > 0) {
+      trackPolyline = L.polyline(polylineCoords, {
+        color: '#4f46e5',
+        weight: 4,
+        opacity: 0.85
+      }).addTo(trackLeafletMap);
+    }
+    
+    matchedVisits.forEach((v, index) => {
+      const lat = parseFloat(v.enter_lat || v.exit_lat);
+      const lng = parseFloat(v.enter_lng || v.exit_lng);
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        const loc = locMap[v.location_id] || { name: 'Невідома локація', address: 'н/д' };
+        
+        const numberIcon = L.divIcon({
+          className: 'custom-div-icon',
+          html: `<div class="w-7 h-7 rounded-full bg-emerald-500 border-2 border-white text-white flex items-center justify-center font-bold text-xs shadow-md active:scale-95 transition-all">${index + 1}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        });
+        
+        const visitMarker = L.marker([lat, lng], { icon: numberIcon }).addTo(trackLeafletMap);
+        
+        const enterT = parseDateString(v.enter_time || v.created_at);
+        const exitT = parseDateString(v.exit_time || v.created_at);
+        const durMin = Math.round((v.duration_seconds || 0) / 60);
+        
+        visitMarker.bindPopup(`
+          <div class="text-xs space-y-1 p-0.5">
+            <div class="font-bold text-emerald-800 text-sm">📍 Візит #${index + 1}</div>
+            <div class="font-semibold text-slate-800">${loc.name}</div>
+            <div class="text-slate-500">${loc.address}</div>
+            <div class="pt-1"><b>Прибуття:</b> ${formatTime(enterT)}</div>
+            <div><b>Відбуття:</b> ${formatTime(exitT)}</div>
+            <div><b>Тривалість:</b> ${durMin} хв</div>
+          </div>
+        `);
+        
+        visitMarker.bindTooltip(`📍 Візит #${index + 1}: ${loc.name}`, {
+          direction: 'top',
+          offset: [0, -5],
+          className: 'bg-white border border-slate-200 text-slate-850 font-semibold px-2 py-1 rounded shadow-sm text-xs z-[2000]'
+        });
+        
+        visitMarker.visitId = v.visit_id;
+        trackMapMarkers.push(visitMarker);
+      }
+    });
+    
+    matchedStops.forEach(s => {
+      const lat = parseFloat(s.anchor_lat);
+      const lng = parseFloat(s.anchor_lng);
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        const stopMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          fillColor: '#f97316',
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.95
+        }).addTo(trackLeafletMap);
+        
+        const startT = parseDateString(s.start_time);
+        const endT = parseDateString(s.end_time);
+        
+        stopMarker.bindPopup(`
+          <div class="text-xs space-y-1 p-0.5">
+            <div class="font-bold text-amber-800 text-sm">🛑 Зупинка / Простій</div>
+            <div><b>Тривалість:</b> ${s.duration_minutes} хв</div>
+            <div><b>Початок:</b> ${formatTime(startT)}</div>
+            <div><b>Кінець:</b> ${formatTime(endT)}</div>
+            <div><b>Макс. дрифт:</b> ${s.max_drift_m || 0} м</div>
+          </div>
+        `);
+        
+        stopMarker.bindTooltip(`🛑 Зупинка: ${s.duration_minutes} хв`, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -8],
+          className: 'bg-amber-50 border border-amber-250 text-amber-800 font-bold px-2 py-0.5 rounded shadow-sm text-[10px] z-[2000]'
+        });
+        
+        stopMarker.stopId = s.stop_id;
+        trackMapMarkers.push(stopMarker);
+      }
+    });
+    
+    document.getElementById('track-map-counter').textContent = `${heartbeats.length} точок на треку`;
+    
+    const allCoords = [];
+    polylineCoords.forEach(c => allCoords.push(c));
+    matchedVisits.forEach(v => {
+      const lat = parseFloat(v.enter_lat || v.exit_lat);
+      const lng = parseFloat(v.enter_lng || v.exit_lng);
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) allCoords.push([lat, lng]);
+    });
+    matchedStops.forEach(s => {
+      const lat = parseFloat(s.anchor_lat);
+      const lng = parseFloat(s.anchor_lng);
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) allCoords.push([lat, lng]);
+    });
+    
+    if (allCoords.length > 0 && !isBackground) {
+      trackLeafletMap.fitBounds(allCoords, { padding: [50, 50], maxZoom: 15 });
+    }
+    
+    renderTrackTimeline(matchedVisits, matchedStops, heartbeats, locMap, fromMinutes, toMinutes, dateStr, courierId);
+  }
+
+  function renderTrackTimeline(matchedVisits, matchedStops, heartbeats, locMap, fromMinutes, toMinutes, dateStr, courierId) {
+    const container = document.getElementById('track-timeline-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    const timelineEvents = [];
+    
+    matchedVisits.forEach((v, index) => {
+      const loc = locMap[v.location_id] || { name: 'Невідома локація', address: 'н/д' };
+      const enterT = parseDateString(v.enter_time || v.created_at);
+      const exitT = parseDateString(v.exit_time || v.created_at);
+      const durMin = Math.round((v.duration_seconds || 0) / 60);
+      const lat = parseFloat(v.enter_lat || v.exit_lat);
+      const lng = parseFloat(v.enter_lng || v.exit_lng);
+      
+      timelineEvents.push({
+        type: 'visit',
+        visitId: v.visit_id,
+        time: enterT,
+        title: `📍 Візит #${index + 1}: ${loc.name}`,
+        details: `${loc.address}<br>⏱️ ${formatTime(enterT)} - ${formatTime(exitT)} (${durMin} хв)`,
+        lat: lat,
+        lng: lng,
+        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-250',
+        icon: '📍'
+      });
+    });
+    
+    matchedStops.forEach(s => {
+      const startT = parseDateString(s.start_time);
+      const endT = parseDateString(s.end_time);
+      const lat = parseFloat(s.anchor_lat);
+      const lng = parseFloat(s.anchor_lng);
+      
+      timelineEvents.push({
+        type: 'stop',
+        stopId: s.stop_id,
+        time: startT,
+        title: `🛑 Зупинка / Простій`,
+        details: `⏱️ ${formatTime(startT)} - ${formatTime(endT)} (${s.duration_minutes} хв)`,
+        lat: lat,
+        lng: lng,
+        badgeClass: 'bg-amber-50 text-amber-800 border-amber-250',
+        icon: '🛑'
+      });
+    });
+    
+    const logs = rawData.eventLogs || [];
+    logs.forEach(log => {
+      if (log.courier_id !== courierId) return;
+      const logDate = parseDateString(log.timestamp);
+      if (!logDate) return;
+      
+      const dd = String(logDate.getDate()).padStart(2, '0');
+      const mm = String(logDate.getMonth() + 1).padStart(2, '0');
+      const yyyy = logDate.getFullYear();
+      const logDateStr = `${dd}.${mm}.${yyyy}`;
+      if (logDateStr !== dateStr) return;
+      
+      const logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+      if (logMinutes < fromMinutes || logMinutes > toMinutes) return;
+      
+      if (log.event_type === 'shift_start_request' || log.event_type === 'shift_start_offline') {
+        timelineEvents.push({
+          type: 'shift_start',
+          time: logDate,
+          title: `🎬 Початок зміни`,
+          details: `Кур'єр вийшов на зміну о ${formatTime(logDate)}`,
+          lat: null,
+          lng: null,
+          badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+          icon: '🎬'
+        });
+      } else if (log.event_type === 'shift_end_request' || log.event_type === 'shift_end_offline') {
+        timelineEvents.push({
+          type: 'shift_end',
+          time: logDate,
+          title: `🏁 Завершення зміни`,
+          details: `Кур'єр завершив зміну о ${formatTime(logDate)}`,
+          lat: null,
+          lng: null,
+          badgeClass: 'bg-rose-50 text-rose-800 border-rose-200',
+          icon: '🏁'
+        });
+      }
+    });
+    
+    heartbeats.forEach(hb => {
+      timelineEvents.push({
+        type: 'heartbeat',
+        time: hb.timestamp,
+        title: `⚡ GPS чек-ін: ${formatTime(hb.timestamp)}`,
+        details: `🔋 Батарея: ${hb.battery}% • 🎯 Точність: ${hb.accuracy}м`,
+        lat: hb.lat,
+        lng: hb.lng,
+        badgeClass: 'bg-slate-50 text-slate-600 border-slate-200',
+        icon: '⚡'
+      });
+    });
+    
+    timelineEvents.sort((a, b) => a.time - b.time);
+    
+    document.getElementById('timeline-counter').textContent = `${timelineEvents.length} подій`;
+    
+    if (timelineEvents.length === 0) {
+      container.innerHTML = '<div class="py-8 text-center text-slate-400 text-xs font-medium">Подій за вказаний період не знайдено.</div>';
+      return;
+    }
+    
+    timelineEvents.forEach(evt => {
+      const card = document.createElement('div');
+      const hasCoords = evt.lat && evt.lng;
+      card.className = `p-3 rounded-xl border ${evt.badgeClass} flex gap-2.5 transition-all select-none ${hasCoords ? 'cursor-pointer hover:scale-[1.01] hover:shadow-sm' : ''}`;
+      
+      card.innerHTML = `
+        <div class="text-base shrink-0 mt-0.5">${evt.icon}</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex justify-between items-baseline gap-2">
+            <h4 class="font-bold text-xs truncate leading-snug">${evt.title}</h4>
+            <span class="text-[10px] font-semibold opacity-70 whitespace-nowrap">${formatTime(evt.time)}</span>
+          </div>
+          <p class="text-[10px] leading-relaxed mt-1 font-medium opacity-80">${evt.details}</p>
+        </div>
+      `;
+      
+      if (hasCoords) {
+        card.onclick = () => {
+          trackLeafletMap.setView([evt.lat, evt.lng], 16);
+          const marker = trackMapMarkers.find(m => {
+            if (evt.type === 'visit') return m.visitId === evt.visitId;
+            if (evt.type === 'stop') return m.stopId === evt.stopId;
+            return m.getLatLng && Math.abs(m.getLatLng().lat - evt.lat) < 0.0001 && Math.abs(m.getLatLng().lng - evt.lng) < 0.0001;
+          });
+          if (marker) marker.openPopup();
+          
+          if (window.innerWidth < 1024) {
+            document.getElementById('track-leaflet-map').scrollIntoView({ behavior: 'smooth' });
+          }
+        };
+      }
+      
+      container.appendChild(card);
+    });
+  }
+</script>
+<?!= include('DashboardFooter'); ?>
