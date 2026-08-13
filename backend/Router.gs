@@ -42,7 +42,8 @@ function doGet(e) {
         'maps': 'DashboardMaps',
         'track-map': 'DashboardTrackMap',
         'analytics': 'DashboardAnalytics',
-        'database': 'DashboardDB'
+        'database': 'DashboardDB',
+        'combined': 'DashboardCombined'
       };
       var templateName = PAGE_MAP[page] || 'DashboardMaps';
       

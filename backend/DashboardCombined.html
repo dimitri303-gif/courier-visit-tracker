@@ -1,0 +1,582 @@
+<?!= include('DashboardHeader'); ?>
+<div id="tab-combined" class="tab-pane flex-1 flex flex-col lg:flex-row gap-6 min-h-[600px]">
+  <!-- Map Container -->
+  <div class="flex-1 bg-brand-card border border-slate-200 rounded-2xl overflow-hidden relative shadow-sm min-h-[450px] lg:min-h-0 flex flex-col">
+    <div class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 flex-wrap gap-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-indigo-650 animate-pulse"></span>
+        <span class="font-bold text-sm text-slate-700">Останні локації та гео-точки на карті</span>
+      </div>
+      <span id="map-counter" class="text-xs font-semibold text-slate-500">0 маркерів</span>
+    </div>
+    <div id="combined-leaflet-map" style="height: 550px; width: 100%;" class="z-10 flex-1"></div>
+  </div>
+  
+  <!-- Right Sidebar Container -->
+  <div class="w-full lg:w-[400px] bg-brand-card border border-slate-200 rounded-2xl p-4 flex flex-col gap-4 shadow-sm shrink-0">
+    <!-- Global Region Filter -->
+    <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-150/80 flex flex-col gap-1.5 shadow-sm">
+      <label for="global-region-filter" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Фільтр за регіоном</label>
+      <select id="global-region-filter" onchange="onRegionChange()" class="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-main focus:ring-2 focus:ring-brand-main/10 transition-all font-bold cursor-pointer">
+        <option value="all">Всі регіони</option>
+      </select>
+    </div>
+
+    <!-- Tab Switcher Pill -->
+    <div class="flex bg-slate-100 p-1 rounded-xl shrink-0">
+      <button id="tab-btn-couriers" onclick="switchRightTab('couriers')" class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-indigo-600 bg-white shadow-sm flex items-center justify-center gap-1.5">
+        🚗 Кур’єри
+      </button>
+      <button id="tab-btn-locations" onclick="switchRightTab('locations')" class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900 flex items-center justify-center gap-1.5">
+        📍 Локації
+      </button>
+    </div>
+    
+    <!-- Tab Content: Couriers -->
+    <div id="right-tab-couriers" class="flex-1 flex flex-col gap-3 min-h-0">
+      <div class="flex justify-between items-center pb-1">
+        <h3 class="font-bold text-slate-800 text-sm">Кур’єри в мережі</h3>
+        <span id="online-counter" class="bg-indigo-50 text-indigo-600 text-xs px-2.5 py-0.5 rounded-full font-bold">0 активних</span>
+      </div>
+      <div class="relative">
+        <input id="map-search" type="text" placeholder="Шукати кур’єра..." oninput="updateMapCouriersList()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-brand-main focus:bg-white focus:ring-2 focus:ring-brand-main/10 transition-all" />
+      </div>
+      <div id="map-couriers-list" class="flex-1 overflow-y-auto space-y-2 max-h-[420px] pr-1">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+    
+    <!-- Tab Content: Locations -->
+    <div id="right-tab-locations" class="hidden flex-1 flex flex-col gap-3 min-h-0">
+      <div class="flex justify-between items-center pb-1">
+        <h3 class="font-bold text-slate-800 text-sm">Список локацій</h3>
+        <span id="loc-map-counter" class="bg-indigo-50 text-indigo-600 text-xs px-2.5 py-0.5 rounded-full font-bold">0 точок</span>
+      </div>
+      <div class="relative">
+        <input id="loc-map-search" type="text" placeholder="Шукати локацію за назвою/ID..." oninput="updateLocationsMapList()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-brand-main focus:bg-white focus:ring-2 focus:ring-brand-main/10 transition-all" />
+      </div>
+      <div id="loc-map-side-list" class="flex-1 overflow-y-auto space-y-2 max-h-[420px] pr-1">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function parseDateString(dateStr) {
+    if (!dateStr) return null;
+    let d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d;
+    const parts = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (parts) {
+      return new Date(
+        parseInt(parts[3], 10),
+        parseInt(parts[2], 10) - 1,
+        parseInt(parts[1], 10),
+        parseInt(parts[4], 10),
+        parseInt(parts[5], 10),
+        parseInt(parts[6], 10)
+      );
+    }
+    return null;
+  }
+
+  let activeTab = 'combined';
+  let combinedMap = null;
+  let courierMarkers = [];
+  let locationMarkers = [];
+  let locationCircles = [];
+  let regionsPopulated = false;
+
+  function switchRightTab(tabName) {
+    const btnCouriers = document.getElementById('tab-btn-couriers');
+    const btnLocations = document.getElementById('tab-btn-locations');
+    const tabCouriers = document.getElementById('right-tab-couriers');
+    const tabLocations = document.getElementById('right-tab-locations');
+    
+    if (tabName === 'couriers') {
+      btnCouriers.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+      btnCouriers.classList.remove('text-slate-500');
+      btnLocations.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
+      btnLocations.classList.add('text-slate-500');
+      
+      tabCouriers.classList.remove('hidden');
+      tabLocations.classList.add('hidden');
+    } else {
+      btnLocations.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+      btnLocations.classList.remove('text-slate-500');
+      btnCouriers.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
+      btnCouriers.classList.add('text-slate-500');
+      
+      tabLocations.classList.remove('hidden');
+      tabCouriers.classList.add('hidden');
+    }
+  }
+
+  function switchTab(tabId) {
+    activeTab = tabId;
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+    const pane = document.getElementById('tab-' + tabId);
+    if (pane) pane.classList.remove('hidden');
+    renderCurrentTab();
+  }
+
+  function renderCurrentTab(isBackground = false) {
+    if (!rawData) return;
+    initCombinedMap(isBackground);
+  }
+
+  function initCombinedMap(isBackground = false) {
+    const mapContainer = document.getElementById('combined-leaflet-map');
+    if (!mapContainer) return;
+    
+    if (!combinedMap) {
+      combinedMap = L.map('combined-leaflet-map').setView([50.4501, 30.5234], 11);
+      
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(combinedMap);
+    }
+    
+    populateRegionsDropdown();
+    renderCombinedMap(isBackground);
+  }
+
+  function populateRegionsDropdown() {
+    if (regionsPopulated || !rawData) return;
+    const dropdown = document.getElementById('global-region-filter');
+    if (!dropdown) return;
+    
+    const locations = rawData.locations || [];
+    const couriers = rawData.couriers || [];
+    
+    const regions = new Set();
+    locations.forEach(loc => {
+      const reg = loc.region ? String(loc.region).trim() : '';
+      if (reg !== '') regions.add(reg);
+    });
+    couriers.forEach(c => {
+      const reg = c.region ? String(c.region).trim() : '';
+      if (reg !== '') regions.add(reg);
+    });
+    
+    const sortedRegions = Array.from(regions).sort();
+    const currentValue = dropdown.value;
+    
+    dropdown.innerHTML = '<option value="all">Всі регіони</option>';
+    sortedRegions.forEach(reg => {
+      const opt = document.createElement('option');
+      opt.value = reg;
+      opt.textContent = reg;
+      dropdown.appendChild(opt);
+    });
+    
+    if (currentValue && sortedRegions.includes(currentValue)) {
+      dropdown.value = currentValue;
+    } else {
+      dropdown.value = 'all';
+    }
+    
+    regionsPopulated = true;
+  }
+
+  function onRegionChange() {
+    renderCombinedMap(false);
+  }
+
+  function renderCombinedMap(isBackground = false) {
+    if (!rawData || !combinedMap) return;
+    
+    const filterRegion = document.getElementById('global-region-filter').value;
+    
+    // Clear previous layers
+    courierMarkers.forEach(m => combinedMap.removeLayer(m));
+    courierMarkers = [];
+    
+    locationMarkers.forEach(m => combinedMap.removeLayer(m));
+    locationMarkers = [];
+    
+    locationCircles.forEach(c => combinedMap.removeLayer(c));
+    locationCircles = [];
+    
+    const coordsGroup = [];
+    
+    // Build profile map for courier region lookup
+    const courierProfileMap = {};
+    (rawData.couriers || []).forEach(c => {
+      courierProfileMap[c.courier_id] = c;
+    });
+    
+    // 1. Render Couriers
+    const courierStatus = rawData.courierStatus || [];
+    const settings = rawData.settings || {};
+    const idleThreshold = parseFloat(settings.idle_threshold_minutes || '5');
+    
+    let courierMarkersCount = 0;
+    let activeCouriersCount = 0;
+    
+    courierStatus.forEach(status => {
+      const lat = parseFloat(status.latitude);
+      const lng = parseFloat(status.longitude);
+      
+      const profile = courierProfileMap[status.courier_id] || {};
+      const cRegion = profile.region ? String(profile.region).trim() : '';
+      
+      // Filter by region
+      if (filterRegion !== 'all' && cRegion !== filterRegion) {
+        return;
+      }
+      
+      const isOnline = status.status === 'active';
+      if (isOnline) activeCouriersCount++;
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        courierMarkersCount++;
+        
+        let isIdleAlert = false;
+        let idleMin = 0;
+        if (isOnline && status.idle_since) {
+          const idleDate = parseDateString(status.idle_since);
+          if (idleDate) {
+            const now = new Date();
+            idleMin = Math.floor((now - idleDate) / 60000);
+            if (idleMin >= idleThreshold) {
+              isIdleAlert = true;
+            }
+          }
+        }
+        
+        const markerColor = isIdleAlert ? '#f97316' : (isOnline ? '#10b981' : '#64748b');
+        const markerOpacity = isOnline ? 0.9 : 0.65;
+        const markerRadius = isOnline ? 10 : 8;
+        
+        const marker = L.circleMarker([lat, lng], {
+          radius: markerRadius,
+          fillColor: markerColor,
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: markerOpacity
+        }).addTo(combinedMap);
+        
+        const batteryText = status.battery_percent ? `${status.battery_percent}%` : 'н/д';
+        const updatedTime = formatDateStr(status.last_seen);
+        const statusText = isOnline ? (isIdleAlert ? "Зупинка (> " + idleThreshold + " хв)" : "В мережі") : "Зміна закінчена";
+        const statusBgColor = isOnline ? (isIdleAlert ? "amber-500" : "emerald-500") : "slate-400";
+        
+        let idleAlertHtml = "";
+        if (isIdleAlert) {
+          idleAlertHtml = '\n              <div class="mt-1.5 bg-rose-50 text-rose-700 border border-rose-150 rounded px-2 py-1 text-[10px] font-bold flex items-center gap-1">\n                ⚠️ Зупинка > ' + idleThreshold + ' хв (триває ' + idleMin + ' хв)\n              </div>';
+        }
+        
+        const popupContent = `
+          <div class="text-xs space-y-1 p-0.5">
+            <div class="font-bold text-slate-800 text-sm">${status.name}</div>
+            <div class="text-slate-500">Код кур’єра: <span class="text-indigo-650 font-mono font-semibold">${status.courier_id}</span></div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-${statusBgColor}"></span>
+               <span class="font-semibold text-slate-700 capitalize">${statusText}</span>
+            </div>
+            ${idleAlertHtml}
+            <div class="text-slate-500 pt-1">Батарея: <span class="text-slate-800 font-medium">${batteryText}</span></div>
+            <div class="text-slate-500">Активність: <span class="text-slate-800 font-medium">${updatedTime}</span></div>
+            <div class="pt-1.5 flex gap-2">
+              <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lng}" target="_blank" class="text-indigo-650 hover:underline font-bold flex items-center gap-1">
+                Google Maps &rarr;
+              </a>
+            </div>
+          </div>
+        `;
+        
+        marker.bindPopup(popupContent);
+        const tooltipText = status.name + (isIdleAlert ? " (Зупинка > " + idleThreshold + " хв)" : "");
+        marker.bindTooltip(tooltipText, {
+          direction: 'top',
+          offset: [0, -5],
+          className: 'bg-white border border-slate-200 text-slate-850 font-semibold px-2 py-1 rounded shadow-sm text-xs z-[2000]'
+        });
+        
+        marker.courierId = status.courier_id;
+        courierMarkers.push(marker);
+        coordsGroup.push([lat, lng]);
+      }
+    });
+    
+    // 2. Render Locations
+    const locations = rawData.locations || [];
+    let locationMarkersCount = 0;
+    
+    locations.forEach(loc => {
+      const lat = parseFloat(loc.latitude);
+      const lng = parseFloat(loc.longitude);
+      const radius = parseFloat(loc.radius_m) || 30;
+      
+      const locRegion = loc.region ? String(loc.region).trim() : '';
+      const isActive = loc.active === 'true' || loc.active === true;
+      
+      if (!isActive) return;
+      
+      // Filter by region
+      if (filterRegion !== 'all' && locRegion !== filterRegion) {
+        return;
+      }
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        locationMarkersCount++;
+        
+        const circle = L.circle([lat, lng], {
+          radius: radius,
+          color: '#6366f1',
+          fillColor: '#6366f1',
+          fillOpacity: 0.08,
+          weight: 1.5,
+          interactive: false
+        }).addTo(combinedMap);
+        
+        const marker = L.circleMarker([lat, lng], {
+          radius: 5,
+          fillColor: '#6366f1',
+          color: '#ffffff',
+          weight: 1.5,
+          opacity: 1,
+          fillOpacity: 1
+        }).addTo(combinedMap);
+        
+        const popupContent = `
+          <div class="text-xs space-y-1 p-0.5">
+            <div class="font-bold text-slate-800 text-sm">${loc.name}</div>
+            <div class="text-slate-500 font-mono text-[10px]">Код локації: <span class="font-semibold text-indigo-650">${loc.location_id}</span></div>
+            <div class="text-slate-650 font-medium">Адреса: ${loc.address}</div>
+            <div class="text-slate-500 pt-0.5">Регіон: <span class="font-semibold text-slate-700">${loc.region || 'Всі'}</span></div>
+            <div class="text-slate-500">Радіус детекції: <span class="font-semibold text-slate-700">${radius} м</span></div>
+            <div class="text-slate-500 font-medium">Тип: <span class="font-semibold text-slate-700">${loc.indoor === 'true' || loc.indoor === true ? 'Критий (Indoor)' : 'Відкритий (Outdoor)'}</span></div>
+          </div>
+        `;
+        
+        marker.bindPopup(popupContent);
+        marker.bindTooltip(loc.name, {
+          direction: 'top',
+          offset: [0, -5],
+          className: 'bg-white border border-slate-200 text-slate-850 font-semibold px-2 py-1 rounded shadow-sm text-xs z-[2000]'
+        });
+        
+        marker.locationId = loc.location_id;
+        locationMarkers.push(marker);
+        locationCircles.push(circle);
+        coordsGroup.push([lat, lng]);
+      }
+    });
+    
+    document.getElementById('map-counter').textContent = `${courierMarkersCount} кур'єрів, ${locationMarkersCount} точок`;
+    document.getElementById('online-counter').textContent = `${activeCouriersCount} активних`;
+    
+    // Auto fit bounds on initial load/region switch
+    if (coordsGroup.length > 0 && !isBackground) {
+      combinedMap.fitBounds(coordsGroup, { padding: [50, 50], maxZoom: 14 });
+    }
+    
+    updateMapCouriersList();
+    updateLocationsMapList();
+  }
+
+  function updateMapCouriersList() {
+    if (!rawData) return;
+    
+    const container = document.getElementById('map-couriers-list');
+    const searchQuery = document.getElementById('map-search').value.toLowerCase().trim();
+    const filterRegion = document.getElementById('global-region-filter').value;
+    
+    const courierStatus = rawData.courierStatus || [];
+    const couriers = rawData.couriers || [];
+    
+    container.innerHTML = '';
+    
+    const phoneMap = {};
+    const courierProfileMap = {};
+    couriers.forEach(c => {
+      phoneMap[c.courier_id] = c.phone || '';
+      courierProfileMap[c.courier_id] = c;
+    });
+    
+    const filtered = courierStatus.filter(status => {
+      const profile = courierProfileMap[status.courier_id] || {};
+      const cRegion = profile.region ? String(profile.region).trim() : '';
+      
+      if (filterRegion !== 'all' && cRegion !== filterRegion) {
+        return false;
+      }
+      
+      const matchesSearch = status.name.toLowerCase().includes(searchQuery) || status.courier_id.toLowerCase().includes(searchQuery);
+      return matchesSearch;
+    });
+    
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="py-4 text-center text-slate-400 text-sm font-medium">Нікого не знайдено.</div>';
+      return;
+    }
+    
+    filtered.forEach(status => {
+      const isOnline = status.status === 'active';
+      
+      const settings = rawData.settings || {};
+      const idleThreshold = parseFloat(settings.idle_threshold_minutes || '5');
+      let isIdleAlert = false;
+      let idleMin = 0;
+      
+      if (isOnline && status.idle_since) {
+        const idleDate = parseDateString(status.idle_since);
+        if (idleDate) {
+          const now = new Date();
+          idleMin = Math.floor((now - idleDate) / 60000);
+          if (idleMin >= idleThreshold) {
+            isIdleAlert = true;
+          }
+        }
+      }
+      
+      const phone = phoneMap[status.status] || phoneMap[status.courier_id] || 'н/д';
+      const batteryText = status.battery_percent ? `${status.battery_percent}%` : 'н/д';
+      const lastSeen = formatDateStr(status.last_seen);
+      
+      let stopBadgeHtml = "";
+      if (isIdleAlert) {
+        stopBadgeHtml = '\n                <span class="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-150 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 animate-pulse">\n                  ⚠️ Зупинка > ' + idleThreshold + ' хв\n                </span>';
+      }
+      
+      const card = document.createElement('div');
+      card.className = `p-3 rounded-xl border transition-all hover:bg-slate-100 cursor-pointer ${isOnline ? (isIdleAlert ? 'bg-amber-50/60 border-amber-250' : 'bg-indigo-50/50 border-indigo-100') : 'bg-slate-50 border-slate-200'}`;
+      
+      const isPending = status.location_request === true || status.location_request === "true";
+      
+      card.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div>
+            <h4 class="font-bold text-sm text-slate-800">${status.name}</h4>
+            <p class="text-xs text-slate-500 font-medium">ID: ${status.courier_id} • Тел: ${phone}</p>
+          </div>
+          <div class="flex flex-col items-end gap-1">
+            <span class="text-xs font-bold px-2 py-0.5 rounded-full ${isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}">
+              ${isOnline ? 'активний' : 'офлайн'}
+            </span>
+            ${stopBadgeHtml}
+          </div>
+        </div>
+        <div class="flex justify-between items-center mt-3 text-xs text-slate-500 font-medium">
+          <span>Батарея: <strong class="text-slate-700">${batteryText}</strong></span>
+          <span>Синхр: <strong class="text-slate-700">${lastSeen}</strong></span>
+        </div>
+        ${isOnline ? `
+          <button onclick="event.stopPropagation(); triggerLocationRequest('${status.courier_id}')" ${isPending ? 'disabled' : ''} 
+            class="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-amber-600 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1">
+            📡 ${isPending ? 'Очікування координат...' : 'Запросити оновлення GPS'}
+          </button>
+        ` : ''}
+      `;
+      
+      card.onclick = function() {
+        const lat = parseFloat(status.latitude);
+        const lng = parseFloat(status.longitude);
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          combinedMap.setView([lat, lng], 15);
+          const marker = courierMarkers.find(m => m.courierId === status.courier_id);
+          if (marker) marker.openPopup();
+          
+          if (window.innerWidth < 1024) {
+            document.getElementById('combined-leaflet-map').scrollIntoView({ behavior: 'smooth' });
+          }
+        } else {
+          alert(`Для кур’єра ${status.name} ще немає точних GPS координат.`);
+        }
+      };
+      
+      container.appendChild(card);
+    });
+  }
+
+  function updateLocationsMapList() {
+    if (!rawData) return;
+    
+    const container = document.getElementById('loc-map-side-list');
+    const searchQuery = document.getElementById('loc-map-search').value.toLowerCase().trim();
+    const filterRegion = document.getElementById('global-region-filter').value;
+    const locations = rawData.locations || [];
+    
+    container.innerHTML = '';
+    
+    const filtered = locations.filter(loc => {
+      const locRegion = loc.region ? String(loc.region).trim() : '';
+      
+      if (filterRegion !== 'all' && locRegion !== filterRegion) {
+        return false;
+      }
+      
+      const matchesSearch = loc.name.toLowerCase().includes(searchQuery) || loc.address.toLowerCase().includes(searchQuery) || loc.location_id.toLowerCase().includes(searchQuery);
+      const isActive = loc.active === 'true' || loc.active === true;
+      return matchesSearch && isActive;
+    });
+    
+    document.getElementById('loc-map-counter').textContent = `${filtered.length} точок`;
+    
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="py-4 text-center text-slate-400 text-sm font-medium">Нікого не знайдено.</div>';
+      return;
+    }
+    
+    filtered.forEach(loc => {
+      const radius = loc.radius_m || 30;
+      const card = document.createElement('div');
+      card.className = `p-3 rounded-xl border bg-slate-50 border-slate-200 hover:bg-slate-100 cursor-pointer transition-all`;
+      
+      card.innerHTML = `
+        <div>
+          <div class="flex justify-between items-start">
+            <h4 class="font-bold text-sm text-slate-800 leading-snug">${loc.name}</h4>
+            <span class="text-[10px] font-mono text-indigo-650 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">ID: ${loc.location_id}</span>
+          </div>
+          <p class="text-xs text-slate-500 font-medium mt-1 leading-snug">${loc.address}</p>
+          <div class="flex justify-between items-center mt-2.5 text-[10px] text-slate-400 font-semibold">
+            <span>Радіус: <strong class="text-slate-650">${radius}м</strong></span>
+            <span>Регіон: <strong class="text-slate-650">${loc.region || 'Всі'}</strong></span>
+          </div>
+        </div>
+      `;
+      
+      card.onclick = function() {
+        const lat = parseFloat(loc.latitude);
+        const lng = parseFloat(loc.longitude);
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          combinedMap.setView([lat, lng], 17);
+          const marker = locationMarkers.find(m => m.locationId === loc.location_id);
+          if (marker) marker.openPopup();
+          
+          if (window.innerWidth < 1024) {
+            document.getElementById('combined-leaflet-map').scrollIntoView({ behavior: 'smooth' });
+          }
+        } else {
+          alert(`Для локації ${loc.name} відсутні GPS координати.`);
+        }
+      };
+      
+      container.appendChild(card);
+    });
+  }
+
+  function triggerLocationRequest(courierId) {
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if (response && response.success) {
+          alert('Запит успішно надіслано! Телефон кур\'єра оновиться під час наступного зв\'язку.');
+          setTimeout(loadData, 500);
+        } else {
+          showErrorAlert('Помилка: ' + (response.error || 'Невідома помилка'));
+        }
+      })
+      .withFailureHandler(function(err) {
+        showErrorAlert('Помилка зв\'язку: ' + err.toString());
+      })
+      .requestCourierLocationFromDashboard(courierId);
+  }
+</script>
+<?!= include('DashboardFooter'); ?>
