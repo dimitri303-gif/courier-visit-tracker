@@ -14,6 +14,44 @@ function generateUUID() {
 }
 
 /**
+ * Надійне збереження стану в PropertiesService та CacheService (захист від скидання кешу Google Apps Script)
+ */
+function getPersistentState_TG(key) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var val = props.getProperty(key);
+    if (val !== null && val !== undefined && val !== "") return val;
+  } catch(e) {}
+  try {
+    var cache = CacheService.getScriptCache();
+    return cache.get(key);
+  } catch(e) {}
+  return null;
+}
+
+function setPersistentState_TG(key, val, ttlSec) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty(key, String(val));
+  } catch(e) {}
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.put(key, String(val), ttlSec || 21600);
+  } catch(e) {}
+}
+
+function removePersistentState_TG(key) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.deleteProperty(key);
+  } catch(e) {}
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.remove(key);
+  } catch(e) {}
+}
+
+/**
  * Розрахунок відстані між двома координатами за формулою гаверсину (в метрах)
  */
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {

@@ -184,7 +184,7 @@ function handleTelegramLocation(message) {
     var idleThresholdMinutes = parseFloat(settings.idle_threshold_minutes || "10");
     var idleRadius = parseFloat(settings.idle_radius_m || "20");
     
-    var idleStateStr = cache.get("idle_TG_" + courierId);
+    var idleStateStr = getPersistentState_TG("idle_TG_" + courierId);
     var idleState = null;
     if (idleStateStr) {
       try {
@@ -266,9 +266,7 @@ function handleTelegramLocation(message) {
       }
     }
     
-    try {
-      cache.put("idle_TG_" + courierId, JSON.stringify(idleState), 21600);
-    } catch(e) {}
+    setPersistentState_TG("idle_TG_" + courierId, JSON.stringify(idleState), 21600);
 
   } catch (err) {
     Logger.log("handleTelegramLocation error: " + err.toString());

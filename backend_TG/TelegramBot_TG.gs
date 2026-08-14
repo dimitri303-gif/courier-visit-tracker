@@ -348,7 +348,7 @@ function endShiftCommand(chatId) {
       cache.remove("state_TG_" + courierId);
       
       // Завершення зупинки при завершенні зміни
-      var idleStateStr = cache.get("idle_TG_" + courierId);
+      var idleStateStr = getPersistentState_TG("idle_TG_" + courierId);
       if (idleStateStr) {
         try {
           var idleState = JSON.parse(idleStateStr);
@@ -383,7 +383,7 @@ function endShiftCommand(chatId) {
           Logger.log("Auto-record stop on shift end error: " + idleErr.toString());
         }
       }
-      cache.remove("idle_TG_" + courierId);
+      removePersistentState_TG("idle_TG_" + courierId);
     } catch(e) {}
     
     // ОНОВЛЮЄМО СТАТУС КУР'ЄРА НА ДАШБОРДІ (ended)
