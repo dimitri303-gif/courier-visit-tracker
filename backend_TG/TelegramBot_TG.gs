@@ -346,6 +346,44 @@ function endShiftCommand(chatId) {
       
       cache.remove("shift_" + courierId);
       cache.remove("state_TG_" + courierId);
+      
+      // Завершення зупинки при завершенні зміни
+      var idleStateStr = cache.get("idle_TG_" + courierId);
+      if (idleStateStr) {
+        try {
+          var idleState = JSON.parse(idleStateStr);
+          var endUnix = Math.floor(endTime.getTime() / 1000);
+          var idleTimeSec = endUnix - (idleState.idle_since || endUnix);
+          
+          var settings = getSettings();
+          var idleThresholdMinutes = parseFloat(settings.idle_threshold_minutes || "10");
+          
+          if (idleState && (idleState.is_idle || idleTimeSec >= idleThresholdMinutes * 60)) {
+            var stopUuid = idleState.is_idle ? idleState.stop_uuid : generateUUID();
+            var stopStateToRecord = {
+              stop_uuid: stopUuid,
+              start_time: idleState.idle_since,
+              anchor_lat: idleState.anchor_lat,
+              anchor_lng: idleState.anchor_lng,
+              max_drift_m: Math.round(idleState.max_drift_m || 0)
+            };
+            
+            recordStop_TG(courierId, foundShiftId, stopStateToRecord, endUnix, idleState.anchor_lat, idleState.anchor_lng);
+            
+            logEvent_TG(courierId, foundShiftId, "idle_stop", "Stop completed on shift end", {
+              stop_uuid: stopUuid,
+              start_time: new Date(idleState.idle_since * 1000).toISOString(),
+              end_time: endTime.toISOString(),
+              anchor_lat: idleState.anchor_lat,
+              anchor_lng: idleState.anchor_lng,
+              max_drift_m: Math.round(idleState.max_drift_m || 0)
+            });
+          }
+        } catch(idleErr) {
+          Logger.log("Auto-record stop on shift end error: " + idleErr.toString());
+        }
+      }
+      cache.remove("idle_TG_" + courierId);
     } catch(e) {}
     
     // ОНОВЛЮЄМО СТАТУС КУР'ЄРА НА ДАШБОРДІ (ended)

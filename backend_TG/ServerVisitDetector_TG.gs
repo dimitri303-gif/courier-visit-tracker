@@ -178,6 +178,98 @@ function handleTelegramLocation(message) {
         }
       }
     }
+    
+    // 6. ДЕТЕКЦІЯ ЗУПИНОК / ПРОСТОЮ (Idle / Stops State Machine)
+    var settings = getSettings();
+    var idleThresholdMinutes = parseFloat(settings.idle_threshold_minutes || "10");
+    var idleRadius = parseFloat(settings.idle_radius_m || "20");
+    
+    var idleStateStr = cache.get("idle_TG_" + courierId);
+    var idleState = null;
+    if (idleStateStr) {
+      try {
+        idleState = JSON.parse(idleStateStr);
+      } catch(e) {}
+    }
+    
+    if (!idleState) {
+      idleState = {
+        anchor_lat: lat,
+        anchor_lng: lng,
+        idle_since: timestamp,
+        is_idle: false,
+        stop_uuid: "",
+        max_drift_m: 0
+      };
+    } else {
+      var drift = getDistanceInMeters(lat, lng, idleState.anchor_lat, idleState.anchor_lng);
+      
+      if (drift > idleRadius) {
+        // Кур'єр рухається (покинув радіус anchor точки)
+        var idleTimeSec = timestamp - idleState.idle_since;
+        
+        if (idleState.is_idle || idleTimeSec >= idleThresholdMinutes * 60) {
+          var stopUuid = idleState.is_idle ? idleState.stop_uuid : generateUUID();
+          var stopStateToRecord = {
+            stop_uuid: stopUuid,
+            start_time: idleState.idle_since,
+            anchor_lat: idleState.anchor_lat,
+            anchor_lng: idleState.anchor_lng,
+            max_drift_m: Math.round(idleState.max_drift_m)
+          };
+          
+          recordStop_TG(courierId, shiftId, stopStateToRecord, timestamp, lat, lng);
+          
+          logEvent_TG(courierId, shiftId, "idle_stop", "Courier started moving after stop", {
+            stop_uuid: stopUuid,
+            start_time: new Date(idleState.idle_since * 1000).toISOString(),
+            end_time: new Date(timestamp * 1000).toISOString(),
+            anchor_lat: idleState.anchor_lat,
+            anchor_lng: idleState.anchor_lng,
+            max_drift_m: Math.round(idleState.max_drift_m)
+          });
+          
+          updateCourierStatus_TG(courierId, courierName, null, null, null, null, null, "");
+        }
+        
+        // Скидаємо стан простою для нової anchor точки
+        idleState = {
+          anchor_lat: lat,
+          anchor_lng: lng,
+          idle_since: timestamp,
+          is_idle: false,
+          stop_uuid: "",
+          max_drift_m: 0
+        };
+      } else {
+        // Кур'єр все ще в радіусі anchor точки (стоїть)
+        if (drift > idleState.max_drift_m) {
+          idleState.max_drift_m = drift;
+        }
+        
+        var idleTimeSec = timestamp - idleState.idle_since;
+        if (idleTimeSec >= idleThresholdMinutes * 60 && !idleState.is_idle) {
+          idleState.is_idle = true;
+          idleState.stop_uuid = generateUUID();
+          
+          var idleStartIso = new Date(idleState.idle_since * 1000).toISOString();
+          
+          logEvent_TG(courierId, shiftId, "idle_start", "Courier is on stop", {
+            stop_uuid: idleState.stop_uuid,
+            start_time: idleStartIso,
+            anchor_lat: idleState.anchor_lat,
+            anchor_lng: idleState.anchor_lng
+          });
+          
+          updateCourierStatus_TG(courierId, courierName, null, null, null, null, null, idleStartIso);
+        }
+      }
+    }
+    
+    try {
+      cache.put("idle_TG_" + courierId, JSON.stringify(idleState), 21600);
+    } catch(e) {}
+
   } catch (err) {
     Logger.log("handleTelegramLocation error: " + err.toString());
   }
@@ -229,3 +321,51 @@ function recordVisit(courierId, shiftId, state, exitTime, exitLat, exitLng) {
     Logger.log("recordVisit error: " + e.toString());
   }
 }
+
+/**
+ * Запис підтвердженої зупинки в таблицю Stops (11 колонок)
+ */
+function recordStop_TG(courierId, shiftId, idleState, exitTimestamp, exitLat, exitLng) {
+  try {
+    var ss = getSpreadsheet();
+    var stopsSheet = ss.getSheetByName("Stops");
+    if (!stopsSheet) {
+      stopsSheet = ss.insertSheet("Stops");
+      stopsSheet.appendRow(["stop_id", "courier_id", "shift_id", "start_time", "end_time", "duration_minutes", "anchor_lat", "anchor_lng", "max_drift_m", "created_at", "map_link"]);
+    }
+    
+    var stopId = idleState.stop_uuid || generateUUID();
+    var startDate = new Date(idleState.start_time * 1000);
+    var endDate = new Date(exitTimestamp * 1000);
+    var durationMins = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+    var now = new Date();
+    
+    var latDot = String(idleState.anchor_lat).replace(',', '.');
+    var lngDot = String(idleState.anchor_lng).replace(',', '.');
+    var mapLink = (idleState.anchor_lat && idleState.anchor_lng)
+      ? '=HYPERLINK("https://www.google.com/maps?q=' + latDot + ',' + lngDot + '"; "Карта")'
+      : "";
+      
+    stopsSheet.appendRow([
+      stopId,
+      courierId,
+      shiftId || "",
+      startDate,
+      endDate,
+      durationMins,
+      idleState.anchor_lat,
+      idleState.anchor_lng,
+      idleState.max_drift_m || 0,
+      now,
+      mapLink
+    ]);
+    
+    var lastRow = stopsSheet.getLastRow();
+    stopsSheet.getRange(lastRow, 4).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    stopsSheet.getRange(lastRow, 5).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+    stopsSheet.getRange(lastRow, 10).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+  } catch (e) {
+    Logger.log("recordStop_TG error: " + e.toString());
+  }
+}
+
