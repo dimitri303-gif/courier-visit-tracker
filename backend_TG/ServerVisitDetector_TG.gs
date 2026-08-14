@@ -248,19 +248,22 @@ function handleTelegramLocation(message) {
         }
         
         var idleTimeSec = timestamp - idleState.idle_since;
-        if (idleTimeSec >= idleThresholdMinutes * 60 && !idleState.is_idle) {
-          idleState.is_idle = true;
-          idleState.stop_uuid = generateUUID();
-          
+        if (idleTimeSec >= idleThresholdMinutes * 60) {
           var idleStartIso = new Date(idleState.idle_since * 1000).toISOString();
           
-          logEvent_TG(courierId, shiftId, "idle_start", "Courier is on stop", {
-            stop_uuid: idleState.stop_uuid,
-            start_time: idleStartIso,
-            anchor_lat: idleState.anchor_lat,
-            anchor_lng: idleState.anchor_lng
-          });
+          if (!idleState.is_idle) {
+            idleState.is_idle = true;
+            idleState.stop_uuid = generateUUID();
+            
+            logEvent_TG(courierId, shiftId, "idle_start", "Courier is on stop", {
+              stop_uuid: idleState.stop_uuid,
+              start_time: idleStartIso,
+              anchor_lat: idleState.anchor_lat,
+              anchor_lng: idleState.anchor_lng
+            });
+          }
           
+          // Завжди оновлюємо статус з idleStartIso, якщо кур'єр у стані простою
           updateCourierStatus_TG(courierId, courierName, null, null, null, null, null, idleStartIso);
         }
       }
