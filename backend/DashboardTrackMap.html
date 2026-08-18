@@ -69,9 +69,20 @@
         </div>
         
         <!-- Timeline -->
-        <div class="border-t border-slate-100 pt-3 flex justify-between items-center bg-slate-50/20">
-          <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Хронологія дня</h3>
-          <span id="timeline-counter" class="bg-indigo-50 text-indigo-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold">0 подій</span>
+        <div class="border-t border-slate-100 pt-3 flex flex-col gap-2 bg-slate-50/20">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Хронологія дня</h3>
+            <span id="timeline-counter" class="bg-indigo-50 text-indigo-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold">0 подій</span>
+          </div>
+          <!-- Timeline Tabs -->
+          <div class="flex bg-slate-100/80 p-0.5 rounded-lg text-[11px] gap-0.5 font-bold">
+            <button id="timeline-tab-all" onclick="setTimelineFilter('all')" class="flex-1 py-1 px-2 rounded-md text-center transition-all bg-white text-slate-800 shadow-sm outline-none">
+              Всі події
+            </button>
+            <button id="timeline-tab-visits" onclick="setTimelineFilter('visits_stops')" class="flex-1 py-1 px-2 rounded-md text-center transition-all text-slate-500 hover:text-slate-800 outline-none">
+              Візити та зупинки
+            </button>
+          </div>
         </div>
         
         <div id="track-timeline-list" class="flex-1 overflow-y-auto space-y-3 max-h-[350px] pr-1">
@@ -100,6 +111,8 @@
   }
 
   let activeTab = 'track-map';
+  let currentTimelineFilter = 'all';
+  let lastTimelineArgs = null;
   let trackLeafletMap = null;
   let trackMapMarkers = [];
   let trackPolyline = null;
@@ -592,6 +605,8 @@
   }
 
   function renderTrackTimeline(matchedVisits, matchedStops, heartbeats, locMap, fromMinutes, toMinutes, dateStr, courierId) {
+    lastTimelineArgs = { matchedVisits, matchedStops, heartbeats, locMap, fromMinutes, toMinutes, dateStr, courierId };
+    
     const container = document.getElementById('track-timeline-list');
     if (!container) return;
     
@@ -694,14 +709,20 @@
     
     timelineEvents.sort((a, b) => a.time - b.time);
     
-    document.getElementById('timeline-counter').textContent = `${timelineEvents.length} подій`;
+    // Filter events based on active tab
+    let filteredEvents = timelineEvents;
+    if (currentTimelineFilter === 'visits_stops') {
+      filteredEvents = timelineEvents.filter(evt => evt.type === 'visit' || evt.type === 'stop');
+    }
     
-    if (timelineEvents.length === 0) {
+    document.getElementById('timeline-counter').textContent = `${filteredEvents.length} подій`;
+    
+    if (filteredEvents.length === 0) {
       container.innerHTML = '<div class="py-8 text-center text-slate-400 text-xs font-medium">Подій за вказаний період не знайдено.</div>';
       return;
     }
     
-    timelineEvents.forEach(evt => {
+    filteredEvents.forEach(evt => {
       const card = document.createElement('div');
       const hasCoords = evt.lat && evt.lng;
       card.className = `p-3 rounded-xl border ${evt.badgeClass} flex gap-2.5 transition-all select-none ${hasCoords ? 'cursor-pointer hover:scale-[1.01] hover:shadow-sm' : ''}`;
@@ -735,6 +756,46 @@
       
       container.appendChild(card);
     });
+  }
+
+  function setTimelineFilter(filter) {
+    currentTimelineFilter = filter;
+    
+    const tabAll = document.getElementById('timeline-tab-all');
+    const tabVisits = document.getElementById('timeline-tab-visits');
+    
+    if (filter === 'all') {
+      if (tabAll) {
+        tabAll.classList.add('bg-white', 'text-slate-800', 'shadow-sm');
+        tabAll.classList.remove('text-slate-500', 'hover:text-slate-800');
+      }
+      if (tabVisits) {
+        tabVisits.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
+        tabVisits.classList.add('text-slate-500', 'hover:text-slate-800');
+      }
+    } else {
+      if (tabAll) {
+        tabAll.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
+        tabAll.classList.add('text-slate-500', 'hover:text-slate-800');
+      }
+      if (tabVisits) {
+        tabVisits.classList.add('bg-white', 'text-slate-800', 'shadow-sm');
+        tabVisits.classList.remove('text-slate-500', 'hover:text-slate-800');
+      }
+    }
+    
+    if (lastTimelineArgs) {
+      renderTrackTimeline(
+        lastTimelineArgs.matchedVisits,
+        lastTimelineArgs.matchedStops,
+        lastTimelineArgs.heartbeats,
+        lastTimelineArgs.locMap,
+        lastTimelineArgs.fromMinutes,
+        lastTimelineArgs.toMinutes,
+        lastTimelineArgs.dateStr,
+        lastTimelineArgs.courierId
+      );
+    }
   }
 </script>
 <?!= include('DashboardFooter'); ?>
