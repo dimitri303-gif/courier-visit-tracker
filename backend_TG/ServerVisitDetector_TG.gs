@@ -32,16 +32,27 @@ function handleTelegramLocation(message) {
     // 1. ОНОВЛЮЄМО СТАТУС ТА КООРДИНАТИ КУР'ЄРА НА ДАШБОРДІ
     updateCourierStatus_TG(courierId, courierName, lat, lng, accuracy, null, "active");
     
-    // 2. ЛОГУЄМО ПЕРІОДИЧНИЙ HEARTBEAT В EventLog
-    logEvent_TG(courierId, shiftId, "heartbeat", "Periodic location heartbeat", {
-      latitude: lat,
-      longitude: lng,
-      accuracy_m: accuracy,
-      source: "telegram_live"
-    });
+    var cache = CacheService.getScriptCache();
+    
+    // 2. ЛОГУЄМО ПЕРІОДИЧНИЙ HEARTBEAT В EventLog (дротлимо до 1 разу на 60 секунд)
+    var lastHeartbeatKey = "last_hb_" + courierId;
+    var lastHeartbeat = cache.get(lastHeartbeatKey);
+    var nowMs = Date.now();
+    var THROTTLE_MS = 60000; // 60 секунд
+    
+    if (!lastHeartbeat || (nowMs - parseInt(lastHeartbeat, 10) >= THROTTLE_MS)) {
+      logEvent_TG(courierId, shiftId, "heartbeat", "Periodic location heartbeat", {
+        latitude: lat,
+        longitude: lng,
+        accuracy_m: accuracy,
+        source: "telegram_live"
+      });
+      try {
+        cache.put(lastHeartbeatKey, String(nowMs), 120); // 2 хвилини кешу
+      } catch(e) {}
+    }
     
     // 3. Отримуємо список активних гео-точок
-    var cache = CacheService.getScriptCache();
     var locationsStr = cache.get("locations_TG");
     var locations = [];
     if (locationsStr) {
