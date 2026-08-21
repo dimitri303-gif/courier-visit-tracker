@@ -93,9 +93,14 @@ function sendTelegramRequest(method, payload) {
   
   try {
     var response = UrlFetchApp.fetch(TELEGRAM_API_URL + "/" + method, options);
-    return JSON.parse(response.getContentText());
+    var content = response.getContentText();
+    var resJson = JSON.parse(content);
+    if (!resJson.ok) {
+      Logger.log("Telegram API Error response for [" + method + "]: " + content);
+    }
+    return resJson;
   } catch (e) {
-    Logger.log("Telegram API Error: " + e.toString());
+    Logger.log("Telegram API Fetch Exception [" + method + "]: " + e.toString());
     return null;
   }
 }
