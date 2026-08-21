@@ -16,15 +16,25 @@ function include(filename) {
   return template.evaluate().getContent();
 }
 
+function getSafeServiceUrl() {
+  try {
+    var service = ScriptApp.getService();
+    if (service && typeof service.getUrl === "function") {
+      return service.getUrl() || "";
+    }
+  } catch(e) {}
+  return "";
+}
+
 function doGet(e) {
-  var action = e.parameter.action;
+  var action = (e && e.parameter) ? e.parameter.action : null;
   
   // Якщо дія не задана, віддаємо веб-інтерфейс для iOS fallback
   if (!action) {
     try {
       var template = HtmlService.createTemplateFromFile("Web");
       // Передаємо URL веб-додатку в шаблон для відправки запитів до себе
-      template.webAppUrl = ScriptApp.getService().getUrl();
+      template.webAppUrl = getSafeServiceUrl();
       return template.evaluate()
         .setTitle("Courier Visit Tracker MVP")
         .addMetaTag("viewport", "width=device-width, initial-scale=1")
@@ -37,7 +47,7 @@ function doGet(e) {
 
   if (action === "dashboard") {
     try {
-      var page = e.parameter.page || 'combined';
+      var page = (e && e.parameter && e.parameter.page) ? e.parameter.page : 'combined';
       var PAGE_MAP = {
         'track-map': 'DashboardTrackMap',
         'analytics': 'DashboardAnalytics',
@@ -48,7 +58,7 @@ function doGet(e) {
       
       // Зберігаємо глобальний контекст перед створенням шаблону
       currentTemplateContext.currentPage = page;
-      currentTemplateContext.webAppUrl = ScriptApp.getService().getUrl();
+      currentTemplateContext.webAppUrl = getSafeServiceUrl();
       
       var template = HtmlService.createTemplateFromFile(templateName);
       template.webAppUrl = currentTemplateContext.webAppUrl;

@@ -10,9 +10,9 @@
 function getDashboardData() {
   try {
     SpreadsheetApp.flush();
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getSpreadsheet();
     if (!ss) {
-      throw new Error("Не вдалося отримати доступ до активної таблиці.");
+      throw new Error("Не вдалося отримати доступ до таблиці.");
     }
     
     var couriersSheet = ss.getSheetByName("Couriers");
