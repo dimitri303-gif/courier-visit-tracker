@@ -134,12 +134,13 @@ function doGet(e) {
  * POST маршрутизатор
  */
 function doPost(e) {
-  var action = e.parameter.action;
-  var payload;
+  var action = (e && e.parameter) ? e.parameter.action : null;
+  var payload = {};
   
   try {
-    // Мобільні пристрої, веб-сторінка та Telegram надсилають JSON у тілі запиту
-    payload = JSON.parse(e.postData.contents);
+    if (e && e.postData && e.postData.contents) {
+      payload = JSON.parse(e.postData.contents);
+    }
   } catch (err) {
     return jsonResponse({ ok: false, error: "Invalid JSON payload" });
   }
@@ -183,6 +184,20 @@ function doPost(e) {
   
   if (action === "login") {
     return handleLogin(payload);
+  }
+
+  if (action === "debug_sheet") {
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName("Couriers");
+    var values = sheet.getDataRange().getValues();
+    return jsonResponse({
+      ok: true,
+      spreadsheet_id: ss.getId(),
+      spreadsheet_name: ss.getName(),
+      rows_count: values.length,
+      headers: values[0],
+      rows: values.slice(0, 15)
+    });
   }
 
   if (action === "migrate") {

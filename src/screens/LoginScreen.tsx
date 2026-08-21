@@ -35,7 +35,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onNavi
     setLoading(true);
 
     try {
-      const response = await ApiService.login(courierId.trim().toUpperCase(), pin.trim());
+      const cleanCourierId = courierId.trim().toUpperCase()
+        .replace(/[\u0421\u0441]/g, 'C')
+        .replace(/[\u041E\u043E]/g, 'O')
+        .replace(/[\u0410\u0430]/g, 'A');
+      const response = await ApiService.login(cleanCourierId, pin.trim());
       
       if (response.ok) {
         // Зберігаємо сесію

@@ -19,18 +19,36 @@ function hashPin(pin) {
   return hashStr;
 }
 
+function normalizeCourierId(id) {
+  if (!id) return "";
+  return String(id)
+    .trim()
+    .toUpperCase()
+    .replace(/[\u0421\u0441]/g, "C")
+    .replace(/[\u041E\u043E]/g, "O")
+    .replace(/[\u0410\u0430]/g, "A")
+    .replace(/[\u0412\u0432]/g, "B")
+    .replace(/[\u0415\u0435]/g, "E")
+    .replace(/[\u041A\u043A]/g, "K")
+    .replace(/[\u041C\u043C]/g, "M")
+    .replace(/[\u041D\u043D]/g, "H")
+    .replace(/[\u0420\u0440]/g, "P")
+    .replace(/[\u0422\u0442]/g, "T")
+    .replace(/[\u0425\u0445]/g, "X");
+}
+
 /**
  * Авторизація кур'єра за ID та PIN-кодом
  */
 function handleLogin(data) {
-  var courierId = data.courier_id;
-  var pin = data.pin;
+  var courierId = normalizeCourierId(data.courier_id);
+  var pin = String(data.pin || "").trim();
   
   if (!courierId || !pin) {
     return jsonResponse({ ok: false, error: "courier_id and pin are required" });
   }
   
-  var isLogist = String(courierId).toUpperCase().indexOf("LO") === 0;
+  var isLogist = courierId.indexOf("LO") === 0;
   var sheetName = isLogist ? "Logists" : "Couriers";
   
   var ss = getSpreadsheet();
@@ -44,9 +62,9 @@ function handleLogin(data) {
   
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
-    var sheetCourierId = String(row[0]);
-    var sheetPinHash = String(row[3]);
-    var active = String(row[5]);
+    var sheetCourierId = normalizeCourierId(row[0]);
+    var sheetPinHash = String(row[3]).trim();
+    var active = String(row[5]).trim();
     
     if (sheetCourierId === courierId) {
       if (active !== "true") {
