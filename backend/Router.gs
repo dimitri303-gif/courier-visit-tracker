@@ -138,10 +138,42 @@ function doPost(e) {
   var payload;
   
   try {
-    // Мобільні пристрої та веб-сторінка будуть відправляти JSON у тілі запиту
+    // Мобільні пристрої, веб-сторінка та Telegram надсилають JSON у тілі запиту
     payload = JSON.parse(e.postData.contents);
   } catch (err) {
     return jsonResponse({ ok: false, error: "Invalid JSON payload" });
+  }
+
+  // 0. Розпізнавання та обробка Telegram Webhook
+  if (payload.update_id !== undefined || payload.message || payload.edited_message) {
+    if (typeof handleTelegramWebhook === "function") {
+      return handleTelegramWebhook(e, payload);
+    } else if (typeof handleTelegramMessage === "function" || typeof handleTelegramLocation === "function") {
+      var chatId = null;
+      try {
+        if (payload.message && payload.message.chat) {
+          chatId = payload.message.chat.id;
+        } else if (payload.edited_message && payload.edited_message.chat) {
+          chatId = payload.edited_message.chat.id;
+        }
+        if (payload.message && typeof handleTelegramMessage === "function") {
+          handleTelegramMessage(payload.message);
+        } else if (payload.edited_message && typeof handleTelegramLocation === "function") {
+          handleTelegramLocation(payload.edited_message);
+        }
+        return HtmlService.createHtmlOutput('OK');
+      } catch (tgErr) {
+        Logger.log("Telegram Error: " + tgErr.toString());
+        if (chatId && typeof sendTelegramRequest === "function") {
+          sendTelegramRequest("sendMessage", {
+            "chat_id": chatId,
+            "text": "⚠️ Помилка сервера:\n" + tgErr.toString()
+          });
+        }
+        return HtmlService.createHtmlOutput('OK');
+      }
+    }
+    return HtmlService.createHtmlOutput('OK');
   }
   
   // Якщо action немає в URL параметрах, шукаємо в JSON тілі

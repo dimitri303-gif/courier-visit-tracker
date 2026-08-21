@@ -16,7 +16,7 @@ function setupDatabase() {
   
   // 1. Створення аркушів та заголовків
   setupSheet(ss, "Couriers", [
-    "courier_id", "name", "phone", "pin_hash", "token", "active", "platform", "notes", "region"
+    "courier_id", "name", "phone", "pin_hash", "token", "active", "platform", "notes", "region", "telegram_chat_id"
   ]);
   
   setupSheet(ss, "Locations", [
@@ -430,6 +430,58 @@ function addNastiaLogist() {
   ]);
   
   Browser.msgBox("Логіста Настю успішно додано!\n\nДані для входу у додаток:\nID: LO002\nPIN: 1234\nРегіон: Івано-Франківськ");
+}
+
+/**
+ * Відновлює та мігрує структуру аркуша Couriers:
+ * 1. Додає заголовок telegram_chat_id у 10-й стовпчик (J).
+ * 2. Переносить Telegram chatId із 5-го стовпчика (E) у 10-й (J).
+ * 3. Очищує 5-й стовпчик (E) для мобільного токена, щоб кур'єри могли нормально логінитись у застосунку.
+ */
+function fixCourierTokensMigration() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    Logger.log("Помилка: не знайдено активну таблицю");
+    return;
+  }
+  
+  var sheet = ss.getSheetByName("Couriers");
+  if (!sheet) {
+    Logger.log("Помилка: аркуш Couriers не знайдено");
+    return;
+  }
+  
+  // Встановлюємо заголовок колонки J
+  sheet.getRange(1, 10).setValue("telegram_chat_id").setFontWeight("bold");
+  
+  var rows = sheet.getDataRange().getValues();
+  var migratedCount = 0;
+  
+  for (var i = 1; i < rows.length; i++) {
+    var tokenVal = String(rows[i][4] || "").trim(); // Column E (Index 4)
+    var tgChatIdVal = String(rows[i][9] || "").trim(); // Column J (Index 9)
+    
+    // Якщо в tokenVal збережено числовий Telegram chatId
+    var isTelegramChatId = /^-?\d+$/.test(tokenVal) && tokenVal.length >= 6;
+    
+    if (isTelegramChatId) {
+      // Якщо в колонці J ще немає chatId, копіюємо туди
+      if (!tgChatIdVal) {
+        sheet.getRange(i + 1, 10).setValue(tokenVal);
+        Logger.log("Кур'єр " + rows[i][0] + " (" + rows[i][1] + "): Telegram chatId " + tokenVal + " перенесено в колонку J.");
+      }
+      // Очищуємо колонку E, щоб кур'єр міг отримати свіжий сесійний токен при вході в додаток
+      sheet.getRange(i + 1, 5).setValue("");
+      migratedCount++;
+    }
+  }
+  
+  Logger.log("Міграцію успішно завершено! Оновлено записів: " + migratedCount);
+  if (typeof Browser !== "undefined" && Browser.msgBox) {
+    try {
+      Browser.msgBox("Успіх: Міграцію токенів завершено! Оновлено кур'єрів: " + migratedCount + ".\n\nТепер кур'єри можуть увійти в застосунок через PIN, а Telegram-бот продовжить працювати незалежно.");
+    } catch(e) {}
+  }
 }
 
 

@@ -119,7 +119,9 @@ function getCourierProfile(chatId) {
     
     var rows = sheet.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][4]) === String(chatId)) {
+      var rowChatId = String(rows[i][9] || ""); // Column J (10th column)
+      var fallbackToken = String(rows[i][4] || ""); // Column E (fallback)
+      if (rowChatId === String(chatId) || fallbackToken === String(chatId)) {
         var profile = {
           courier_id: String(rows[i][0]),
           name: String(rows[i][1]),

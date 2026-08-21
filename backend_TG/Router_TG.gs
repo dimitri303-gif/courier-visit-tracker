@@ -1,16 +1,16 @@
 /**
- * Router_TG.gs
- * Точка входу для вебхуків Telegram.
+ * Обробка Telegram вебхука (викликається з центрального doPost або автономно)
  */
-
-function doPost(e) {
+function handleTelegramWebhook(e, update) {
   var chatId = null;
   try {
-    if (!e || !e.postData || !e.postData.contents) {
+    if (!update && e && e.postData && e.postData.contents) {
+      update = JSON.parse(e.postData.contents);
+    }
+    if (!update) {
       return HtmlService.createHtmlOutput('OK');
     }
     
-    var update = JSON.parse(e.postData.contents);
     if (update.message && update.message.chat) {
       chatId = update.message.chat.id;
     } else if (update.edited_message && update.edited_message.chat) {
@@ -28,7 +28,7 @@ function doPost(e) {
     
     return HtmlService.createHtmlOutput('OK');
   } catch (err) {
-    Logger.log("doPost Error: " + err.toString());
+    Logger.log("handleTelegramWebhook Error: " + err.toString());
     if (chatId) {
       sendTelegramRequest("sendMessage", {
         "chat_id": chatId,
@@ -37,10 +37,6 @@ function doPost(e) {
     }
     return HtmlService.createHtmlOutput('OK');
   }
-}
-
-function doGet(e) {
-  return HtmlService.createHtmlOutput('Courier Tracker Telegram Webhook is active and running.');
 }
 
 /**

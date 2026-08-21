@@ -148,11 +148,14 @@ function handleContactRegistration(chatId, phone) {
         break;
       }
     }
-    
     if (courierId && matchedRowIndex > 0) {
-      // Безпечно записуємо токен (chatId) у колонку 5 (E)
+      // Безпечно записуємо Telegram chatId у колонку 10 (J)
       try {
-        sheet.getRange(matchedRowIndex, 5).setValue(String(chatId));
+        // Переконуємось, що заголовок стовпчика 10 встановлено
+        if (sheet.getRange(1, 10).getValue() !== "telegram_chat_id") {
+          sheet.getRange(1, 10).setValue("telegram_chat_id");
+        }
+        sheet.getRange(matchedRowIndex, 10).setValue(String(chatId));
         // Якщо є 7+ колонок - пишемо платформу
         if (sheet.getMaxColumns() >= 7) {
           sheet.getRange(matchedRowIndex, 7).setValue("telegram");
