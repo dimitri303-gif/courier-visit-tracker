@@ -7,7 +7,7 @@
  * Отримує список кур'єрів для логіста з його регіону та їхній поточний статус
  */
 function handleGetLogistCouriers(data, logist) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   
   // 1. Отримуємо список усіх активних кур'єрів з регіону логіста
   var couriersSheet = ss.getSheetByName("Couriers");
@@ -127,7 +127,7 @@ function handleRequestLocation(data) {
     return jsonResponse({ ok: false, error: "courier_id is required" });
   }
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("CourierStatus");
   if (!sheet) {
     return jsonResponse({ ok: false, error: "CourierStatus sheet not found" });
@@ -155,7 +155,7 @@ function handleRequestLocation(data) {
  * для встановлення прапорця запиту геолокації.
  */
 function requestCourierLocationFromDashboard(courierId) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("CourierStatus");
   if (!sheet) return { success: false, error: "CourierStatus sheet not found" };
   

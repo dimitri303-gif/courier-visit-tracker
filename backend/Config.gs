@@ -4,13 +4,25 @@
  */
 
 // Системні налаштування за замовчуванням
+var SPREADSHEET_ID = "10xLqu5qIzxpIjFUoKlrzAFV7n4O7h3CADy1qYHxsLpA";
 var CACHE_TIME_SECS = 300; // 5 хвилин для кешування конфігурацій
+
+/**
+ * Отримує таблицю (підтримує як зв'язані, так і автономні скрипти)
+ */
+function getSpreadsheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
+  return ss;
+}
 
 /**
  * Отримує налаштування у вигляді асоціативного об'єкта (key -> value)
  */
 function getSettings() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("Settings");
   var rows = sheet.getDataRange().getValues();
   var settings = {};
@@ -29,7 +41,7 @@ function getSettings() {
  * Отримання списку активних локацій для завантаження на пристрій
  */
 function getActiveLocations(courierRegion) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("Locations");
   var rows = sheet.getDataRange().getValues();
   var locations = [];
@@ -63,7 +75,7 @@ function getActiveLocations(courierRegion) {
  * а також додає необхідних логістів за потреби.
  */
 function checkAndAutoSetup() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   if (!ss) return;
   
   // 1. Оновлення та перевірка налаштувань (додає відсутні ключі)

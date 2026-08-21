@@ -9,7 +9,7 @@
 function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, status, idleSince) {
   if (!courierId) return;
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("CourierStatus");
   if (!sheet) return;
   
@@ -83,7 +83,7 @@ function updateCourierStatus(courierId, name, lat, lng, accuracy, battery, statu
  * Перевіряє наявність активного запиту координат від логіста для конкретного кур'єра.
  */
 function hasPendingLocationRequest(courierId) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("CourierStatus");
   if (!sheet) return false;
   

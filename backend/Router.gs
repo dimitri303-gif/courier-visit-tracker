@@ -184,6 +184,14 @@ function doPost(e) {
   if (action === "login") {
     return handleLogin(payload);
   }
+
+  if (action === "migrate") {
+    if (typeof fixCourierTokensMigration === "function") {
+      fixCourierTokensMigration();
+      return jsonResponse({ ok: true, message: "fixCourierTokensMigration executed successfully" });
+    }
+    return jsonResponse({ ok: false, error: "fixCourierTokensMigration not found" });
+  }
   
   // Для решти запитів потрібен токен авторизації
   var token = payload.token;

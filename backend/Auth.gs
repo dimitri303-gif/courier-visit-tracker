@@ -33,7 +33,7 @@ function handleLogin(data) {
   var isLogist = String(courierId).toUpperCase().indexOf("LO") === 0;
   var sheetName = isLogist ? "Logists" : "Couriers";
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     return jsonResponse({ ok: false, error: "Sheet " + sheetName + " not found" });
@@ -85,7 +85,7 @@ function handleLogin(data) {
  * Перевірка та пошук кур'єра за його унікальним токеном
  */
 function getCourierByToken(token) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   
   // 1. Шукаємо в Couriers
   var sheet = ss.getSheetByName("Couriers");

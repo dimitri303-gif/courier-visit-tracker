@@ -27,7 +27,7 @@ function handleShiftStart(data, courier) {
     return jsonResponse({ ok: false, error: "shift_id is required" });
   }
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("Shifts");
   
   // Зчитуємо тільки останні 200 рядків замість всієї таблиці
@@ -101,7 +101,7 @@ function handleShiftEnd(data, courier) {
     return jsonResponse({ ok: false, error: "shift_id is required" });
   }
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName("Shifts");
   
   // Зчитуємо тільки останні 200 рядків замість всієї таблиці

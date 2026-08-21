@@ -16,7 +16,7 @@ function handleEventsBatch(data, courier) {
     return jsonResponse({ ok: false, error: "batch array is required" });
   }
   
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var visitsSheet = ss.getSheetByName("Visits");
   var logsSheet = ss.getSheetByName("EventLog");
   var stopsSheet = ss.getSheetByName("Stops");

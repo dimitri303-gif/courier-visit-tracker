@@ -51,7 +51,7 @@ const KEYS = {
 };
 
 // Дефолтна адреса бекенду (може бути змінена в екрані Debug)
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwobsbpl3llmUB_GwHsZAFc15qlyt75DbzmADrcwqgOKdHWs1Xp9KiXKEls2Qw1DBchuQ/exec';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxJNslGY4flV3_Mm6lsqWWvpwkNSV8WeVxwSUnM-EFF7upjKZIVyN4w1CSmZjnOfAo/exec';
 
 export const StorageService = {
   async getApiUrl(): Promise<string> {
