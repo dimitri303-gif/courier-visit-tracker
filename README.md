@@ -10,22 +10,24 @@
 
 ```mermaid
 graph TD
-    subgraph Мобільні клієнти
-        A[Android App: React Native + Expo] -->|POST/GET JSON| C[Google Apps Script API]
-        B[iOS Web Fallback: HTML/JS] -->|POST/GET JSON| C
+    subgraph Клієнти системи
+        A[Android App: React Native + Expo] -->|POST/GET JSON API| C[Courier Tracker Backend]
+        B[iOS Web Fallback: HTML/JS] -->|GET / Web App| C
+        TG[Telegram Bot: Live Location] -->|Webhook POST| C
+        DASH[Web Dashboard Логіста] -->|GET ?action=dashboard| C
     end
     
-    subgraph Бекенд та База Даних
-        C -->|LockService / Запис| D[(Google Sheets)]
+    subgraph Google Таблиця База Даних
+        C -->|LockService / Швидкий запис| D[(Courier Visit Tracker Database)]
     end
-end
 ```
 
 1. **Android App (Основний клієнт):** Написаний на React Native (Expo) + TypeScript. Використовує фонове відстеження геолокації та локальний аналізатор відстані для детекції візитів і зупинок.
-2. **Telegram Bot (`backend_TG`):** Інтеграція з Telegram API через Webhook. Дозволяє кур'єрам починати/завершувати зміни та транслювати геопозицію в реальному часі (Live Location). Серверний детектор розраховує візити на точки (`Visits`) та незаплановані зупинки (`Stops`).
+2. **Telegram Bot (Модуль `_TG` у єдиному бекенді):** Інтеграція з Telegram API через Webhook. Дозволяє кур'єрам починати/завершувати зміни та транслювати геопозицію в реальному часі (Live Location). Серверний детектор розраховує візити на точки (`Visits`) та незаплановані зупинки (`Stops`).
 3. **iOS Web Fallback (Адаптивна веб-сторінка):** Роздається сервером Google Apps Script для користувачів iPhone. Працює в ручному режимі (manual check-in) через обмеження фонового GPS в iOS-браузерах.
-4. **Google Apps Script Web App (API-сервер):** Обробляє авторизацію, логіку змін, групову синхронізацію та запис у таблицю.
-5. **Google Sheets (База даних):** Використовується для адміністрування та збереження результатів (`Couriers`, `Locations`, `Shifts`, `Visits`, `Stops`, `EventLog`, `Settings`, `CourierStatus`).
+4. **Web Dashboard Логіста:** Вбудована аналітична панель реального часу з інтерактивною картою кур'єрів, графіками та реєстрами.
+5. **Google Apps Script Web App (Єдиний бекенд `Courier Tracker Backend`):** Об'єднаний сервер, прив'язаний безпосередньо до Google Таблиці. Обробляє авторизацію, логіку змін, групову синхронізацію, вебхуки Telegram та роздає веб-інтерфейси.
+6. **Google Sheets (База даних):** Використовується для адміністрування та збереження результатів (`Couriers`, `Locations`, `Shifts`, `Visits`, `Stops`, `EventLog`, `Settings`, `CourierStatus`).
 
 ---
 
@@ -164,13 +166,13 @@ stateDiagram-v2
 ---
 
 ## 🔄 Інтеграція та синхронізація коду (Clasp)
-
-Для зручності розробки налаштовано інструмент **Google Clasp**, який зв'язує локальну папку `backend/` із хмарним проектом Google Apps Script.
-
+ 
+Для зручності розробки налаштовано інструмент **Google Clasp**, який напряму зв'язує локальну папку `backend/` із хмарним проектом `Courier Tracker Backend` у Google Таблиці.
+ 
 ### Конфігураційні файли:
-* **`.clasp.json`** — містить `scriptId` та вказує на робочу директорію `rootDir: "./backend"`.
-* **`backend/appsscript.json`** — маніфест Apps Script проекту (налаштування Timezone `Europe/Kiev` та доступу до Web App).
-
+* **`backend/.clasp.json`** — містить `scriptId: "1JdbAXrHkAcSbyOoQjyauMgC8w263zQ2FLScCQcrt920OttJJOjNx9keK"` та вказує на робочу директорію `rootDir: "./"`.
+* **`backend/appsscript.json`** — маніфест Apps Script проекту (налаштування Timezone `Europe/Kiev`, доступ `ANYONE`, виконання `USER_DEPLOYING`).
+ 
 ### Робочі команди в терміналі:
 1. Авторизація (виконується один раз):
    ```bash
@@ -178,7 +180,12 @@ stateDiagram-v2
    ```
 2. Синхронізація (відправка локального коду в хмару):
    ```bash
+   cd backend
    npx @google/clasp push -f
+   ```
+3. Створення нового релізу / оновлення розгортання:
+   ```bash
+   npx @google/clasp deploy -i AKfycbwobsbpl3llmUB_GwHsZAFc15qlyt75DbzmADrcwqgOKdHWs1Xp9KiXKEls2Qw1DBchuQ --description "Production Release"
    ```
 
 ---
