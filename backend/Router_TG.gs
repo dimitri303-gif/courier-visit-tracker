@@ -43,10 +43,9 @@ function handleTelegramWebhook(e, update) {
  * Встановлення вебхука для Telegram-бота
  */
 function setupWebhook(customUrl) {
-  var webAppUrl = customUrl || ScriptApp.getService().getUrl();
-  if (!webAppUrl || webAppUrl === "") {
-    Logger.log("Помилка: Web App URL не знайдено. Спочатку зробіть Deploy (Ввести в дію -> Нове введення в дію як Web App).");
-    return "No WebApp URL";
+  var webAppUrl = customUrl || "https://script.google.com/macros/s/AKfycbwobsbpl3llmUB_GwHsZAFc15qlyt75DbzmADrcwqgOKdHWs1Xp9KiXKEls2Qw1DBchuQ/exec";
+  if (webAppUrl.indexOf("/dev") !== -1) {
+    webAppUrl = "https://script.google.com/macros/s/AKfycbwobsbpl3llmUB_GwHsZAFc15qlyt75DbzmADrcwqgOKdHWs1Xp9KiXKEls2Qw1DBchuQ/exec";
   }
   var response = UrlFetchApp.fetch(TELEGRAM_API_URL + "/setWebhook?url=" + encodeURIComponent(webAppUrl));
   var resText = response.getContentText();
