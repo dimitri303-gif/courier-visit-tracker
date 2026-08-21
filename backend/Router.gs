@@ -187,8 +187,8 @@ function doPost(e) {
 
   if (action === "migrate") {
     if (typeof fixCourierTokensMigration === "function") {
-      fixCourierTokensMigration();
-      return jsonResponse({ ok: true, message: "fixCourierTokensMigration executed successfully" });
+      var res = fixCourierTokensMigration();
+      return jsonResponse(res);
     }
     return jsonResponse({ ok: false, error: "fixCourierTokensMigration not found" });
   }

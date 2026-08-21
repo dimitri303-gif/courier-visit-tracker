@@ -439,16 +439,16 @@ function addNastiaLogist() {
  * 3. Очищує 5-й стовпчик (E) для мобільного токена, щоб кур'єри могли нормально логінитись у застосунку.
  */
 function fixCourierTokensMigration() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   if (!ss) {
-    Logger.log("Помилка: не знайдено активну таблицю");
-    return;
+    Logger.log("Помилка: не знайдено таблицю");
+    return { ok: false, error: "Spreadsheet not found" };
   }
   
   var sheet = ss.getSheetByName("Couriers");
   if (!sheet) {
     Logger.log("Помилка: аркуш Couriers не знайдено");
-    return;
+    return { ok: false, error: "Couriers sheet not found" };
   }
   
   // Встановлюємо заголовок колонки J
@@ -476,12 +476,9 @@ function fixCourierTokensMigration() {
     }
   }
   
+  SpreadsheetApp.flush();
   Logger.log("Міграцію успішно завершено! Оновлено записів: " + migratedCount);
-  if (typeof Browser !== "undefined" && Browser.msgBox) {
-    try {
-      Browser.msgBox("Успіх: Міграцію токенів завершено! Оновлено кур'єрів: " + migratedCount + ".\n\nТепер кур'єри можуть увійти в застосунок через PIN, а Telegram-бот продовжить працювати незалежно.");
-    } catch(e) {}
-  }
+  return { ok: true, migrated_count: migratedCount };
 }
 
 
